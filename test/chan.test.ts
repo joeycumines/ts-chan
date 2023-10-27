@@ -473,9 +473,9 @@ describe('Chan', () => {
       expect(chan.concurrency).toBe(0);
       await Promise.all(all);
       expect(logs).toStrictEqual([
-        [0, 'error: Error: js-chan: send on closed channel'],
-        [1, 'error: Error: js-chan: send on closed channel'],
-        [2, 'error: Error: js-chan: send on closed channel'],
+        [0, 'error: Error: ts-chan: send on closed channel'],
+        [1, 'error: Error: ts-chan: send on closed channel'],
+        [2, 'error: Error: ts-chan: send on closed channel'],
       ]);
     });
 

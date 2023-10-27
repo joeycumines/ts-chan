@@ -167,7 +167,7 @@ export class Select<T extends readonly unknown[] | []> {
         });
         if (abortListener === undefined) {
           throw new Error(
-            'js-chan: select: next: promise executor not called synchronously'
+            'ts-chan: select: next: promise executor not called synchronously'
           );
         }
       }
@@ -204,7 +204,7 @@ export class Select<T extends readonly unknown[] | []> {
           this.#cases[i][selectState]
       ) {
         throw new Error(
-          `js-chan: select: unexpected error that should never happen: invalid index: ${i}`
+          `ts-chan: select: unexpected error that should never happen: invalid index: ${i}`
         );
       }
 
@@ -225,7 +225,7 @@ export class Select<T extends readonly unknown[] | []> {
       v?.[selectState]?.cidx === undefined ||
       this.#cases[v[selectState].cidx] !== v
     ) {
-      throw new Error('js-chan: select: case not found');
+      throw new Error('ts-chan: select: case not found');
     }
 
     let result:
@@ -278,12 +278,12 @@ export class Select<T extends readonly unknown[] | []> {
           v[selectState].pidx = undefined;
         }
       } else {
-        throw new Error('js-chan: select: case not receivable');
+        throw new Error('ts-chan: select: case not receivable');
       }
     }
 
     if (result === undefined) {
-      throw new Error('js-chan: select: case not ready');
+      throw new Error('ts-chan: select: case not ready');
     }
 
     // consuming the value
@@ -313,7 +313,7 @@ export class Select<T extends readonly unknown[] | []> {
           c.send.removeSender(c.scb);
         } catch (e: unknown) {
           err ??=
-            e ?? new Error('js-chan: select: send: error removing sender');
+            e ?? new Error('ts-chan: select: send: error removing sender');
         }
       }
       if (c.hrcb) {
@@ -322,7 +322,7 @@ export class Select<T extends readonly unknown[] | []> {
           c.recv.removeReceiver(c.rcb);
         } catch (e: unknown) {
           err ??=
-            e ?? new Error('js-chan: select: recv: error removing receiver');
+            e ?? new Error('ts-chan: select: recv: error removing receiver');
         }
       }
     }
@@ -332,7 +332,7 @@ export class Select<T extends readonly unknown[] | []> {
 
   #throwIfInUse() {
     if (this.#waiting) {
-      throw new Error('js-chan: select: cases in use');
+      throw new Error('ts-chan: select: cases in use');
     }
   }
 }
@@ -365,7 +365,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
     stopTokenForMapPendingValue === undefined
   ) {
     throw new Error(
-      'js-chan: select: unexpected error that should never happen: stop vars not set'
+      'ts-chan: select: unexpected error that should never happen: stop vars not set'
     );
   }
 
@@ -375,7 +375,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
 
   if (isSelectCase(v)) {
     if (v[selectState].cidx !== undefined) {
-      throw new Error('js-chan: select: case reused');
+      throw new Error('ts-chan: select: case reused');
     }
 
     v[selectState].cidx = i;
@@ -421,7 +421,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
 
         return new Promise<number>((resolve, reject) => {
           if (s.hscb) {
-            throw new Error('js-chan: select: send: already added sender');
+            throw new Error('ts-chan: select: send: already added sender');
           }
 
           pendingResolve = resolve;
@@ -437,7 +437,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
             if (pendingResolve !== undefined || pendingReject !== undefined) {
               reject(
                 new Error(
-                  'js-chan: select: send: addSender returned false but did not call the callback synchronously'
+                  'ts-chan: select: send: addSender returned false but did not call the callback synchronously'
                 )
               );
             }
@@ -474,7 +474,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
 
         return new Promise<number>((resolve, reject) => {
           if (s.hrcb) {
-            throw new Error('js-chan: select: recv: already added receiver');
+            throw new Error('ts-chan: select: recv: already added receiver');
           }
 
           pendingResolve = resolve;
@@ -490,7 +490,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
             if (pendingResolve !== undefined || pendingReject !== undefined) {
               reject(
                 new Error(
-                  'js-chan: select: recv: addReceiver returned false but did not call the callback synchronously'
+                  'ts-chan: select: recv: addReceiver returned false but did not call the callback synchronously'
                 )
               );
             }
@@ -503,7 +503,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
       };
     } else {
       throw new Error(
-        'js-chan: select: unexpected error that should never happen: case has neither send nor recv'
+        'ts-chan: select: unexpected error that should never happen: case has neither send nor recv'
       );
     }
 

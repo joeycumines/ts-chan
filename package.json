@@ -1,8 +1,8 @@
 {
-  "name": "js-chan",
+  "name": "ts-chan",
   "version": "0.1.0",
   "description": "Concurrency primitives for TypeScript and JavaScript.",
-  "repository": "joeycumines/js-chan",
+  "repository": "joeycumines/ts-chan",
   "keywords": [
     "concurrency",
     "channel",
@@ -16,9 +16,9 @@
   "author": "Joseph Cumines <joeycumines@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/joeycumines/js-chan/issues"
+    "url": "https://github.com/joeycumines/ts-chan/issues"
   },
-  "homepage": "https://github.com/joeycumines/js-chan#readme",
+  "homepage": "https://github.com/joeycumines/ts-chan#readme",
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@swc/core": "^1.3.93",
@@ -38,14 +38,14 @@
   "type": "module",
   "source": "src/index.ts",
   "types": "build/src/index.d.ts",
-  "main": "build/js-chan.js",
-  "module": "build/js-chan.mjs",
-  "unpkg": "build/js-chan.umd.js",
+  "main": "build/ts-chan.js",
+  "module": "build/ts-chan.mjs",
+  "unpkg": "build/ts-chan.umd.js",
   "exports": {
     "types": "./build/src/index.d.ts",
-    "import": "./build/js-chan.mjs",
-    "require": "./build/js-chan.js",
-    "default": "./build/js-chan.mjs"
+    "import": "./build/ts-chan.mjs",
+    "require": "./build/ts-chan.js",
+    "default": "./build/ts-chan.mjs"
   },
   "scripts": {
     "lint": "gts lint",
@@ -57,7 +57,7 @@
     "posttest": "npm run lint",
     "all": "npm-run-all -s build -p test docs",
     "clean": "npm-run-all -p clean:gts clean:pack",
-    "clean:pack": "rimraf --glob js-chan-*.tgz",
+    "clean:pack": "rimraf --glob ts-chan-*.tgz",
     "test": "npm-run-all -p lint jest typecheck",
     "build": "npm-run-all -s clean:gts compile",
     "jest": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",

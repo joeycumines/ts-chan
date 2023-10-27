@@ -35,7 +35,7 @@ describe('CircularBuffer', () => {
     buffer.push(1);
     buffer.push(2);
     buffer.push(3);
-    expect(() => buffer.push(4)).toThrow('js-chan: buffer full');
+    expect(() => buffer.push(4)).toThrow('ts-chan: buffer full');
     expect(buffer.full).toBe(true);
     expect(buffer.length).toBe(3);
     expect(buffer.peek()).toBe(1);

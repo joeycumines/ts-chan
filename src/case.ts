@@ -9,7 +9,7 @@ import {
   type Sendable,
 } from './protocol';
 
-export const selectState = Symbol('js-chan.selectState');
+export const selectState = Symbol('ts-chan.selectState');
 
 /**
  * SelectCase models the state of a single case in a {@link Select}.

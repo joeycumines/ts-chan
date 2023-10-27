@@ -273,7 +273,7 @@ export class Chan<T>
           lastError =
             e ??
             lastError ??
-            new Error('js-chan: chan: recv: error closing channel');
+            new Error('ts-chan: chan: recv: error closing channel');
         }
       }
       this.#recvs.length = 0;
@@ -289,7 +289,7 @@ export class Chan<T>
           lastError =
             e ??
             lastError ??
-            new Error('js-chan: chan: send: error closing channel');
+            new Error('ts-chan: chan: send: error closing channel');
           continue;
         }
         this.#buffer.push(value);
@@ -307,7 +307,7 @@ export class Chan<T>
             lastError =
               e ??
               lastError ??
-              new Error('js-chan: chan: send: error closing channel');
+              new Error('ts-chan: chan: send: error closing channel');
           }
         }
       }

@@ -8,7 +8,7 @@ export class CircularBuffer<T> {
 
   constructor(capacity: number) {
     if (!Number.isSafeInteger(capacity) || capacity <= 0) {
-      throw new Error(`js-chan: invalid capacity: ${capacity}`);
+      throw new Error(`ts-chan: invalid capacity: ${capacity}`);
     }
     this.capacity = capacity;
     this.buffer = new Array(capacity);
@@ -32,7 +32,7 @@ export class CircularBuffer<T> {
   // Adds an item to the buffer. Throws an error if full.
   push(item: T): void {
     if (this.size >= this.capacity) {
-      throw new Error('js-chan: buffer full');
+      throw new Error('ts-chan: buffer full');
     }
     this.buffer[this.tail] = item;
     this.tail = (this.tail + 1) % this.capacity;

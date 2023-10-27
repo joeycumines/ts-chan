@@ -1,4 +1,4 @@
-# js-chan
+# ts-chan
 
 Concurrency primitives for TypeScript and JavaScript.
 

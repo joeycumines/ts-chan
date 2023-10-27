@@ -39,7 +39,7 @@ export type Receivable<T> = {
 /**
  * See {@link Receivable}.
  */
-export const getReceiver = Symbol('js-chan.getReceiver');
+export const getReceiver = Symbol('ts-chan.getReceiver');
 
 /**
  * Sender allows callers to send values.
@@ -134,7 +134,7 @@ export type Sendable<T> = {
 /**
  * See {@link Sendable}.
  */
-export const getSender = Symbol('js-chan.getSender');
+export const getSender = Symbol('ts-chan.getSender');
 
 /**
  * Provided as a convenience, that SHOULD be used by {@link Sender}
@@ -148,7 +148,7 @@ export class SendOnClosedChannelError extends Error {
       args.length = 1;
     }
     if (args[0] === undefined) {
-      args[0] = 'js-chan: send on closed channel';
+      args[0] = 'ts-chan: send on closed channel';
     }
     super(...args);
   }
@@ -165,7 +165,7 @@ export class CloseOfClosedChannelError extends Error {
       args.length = 1;
     }
     if (args[0] === undefined) {
-      args[0] = 'js-chan: close of closed channel';
+      args[0] = 'ts-chan: close of closed channel';
     }
     super(...args);
   }
