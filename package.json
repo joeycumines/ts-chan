@@ -1,19 +1,24 @@
 {
-  "name": "js-channel",
+  "name": "js-chan",
   "version": "0.1.0",
   "description": "Concurrency primitives for TypeScript and JavaScript.",
-  "repository": "joeycumines/js-channel",
+  "repository": "joeycumines/js-chan",
   "keywords": [
     "concurrency",
     "channel",
-    "channels"
+    "channels",
+    "select",
+    "abort",
+    "promise",
+    "queue",
+    "buffer"
   ],
   "author": "Joseph Cumines <joeycumines@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/joeycumines/js-channel/issues"
+    "url": "https://github.com/joeycumines/js-chan/issues"
   },
-  "homepage": "https://github.com/joeycumines/js-channel#readme",
+  "homepage": "https://github.com/joeycumines/js-chan#readme",
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@swc/core": "^1.3.93",
@@ -33,14 +38,14 @@
   "type": "module",
   "source": "src/index.ts",
   "types": "build/src/index.d.ts",
-  "main": "build/js-channel.js",
-  "module": "build/js-channel.mjs",
-  "unpkg": "build/js-channel.umd.js",
+  "main": "build/js-chan.js",
+  "module": "build/js-chan.mjs",
+  "unpkg": "build/js-chan.umd.js",
   "exports": {
     "types": "./build/src/index.d.ts",
-    "import": "./build/js-channel.mjs",
-    "require": "./build/js-channel.js",
-    "default": "./build/js-channel.mjs"
+    "import": "./build/js-chan.mjs",
+    "require": "./build/js-chan.js",
+    "default": "./build/js-chan.mjs"
   },
   "scripts": {
     "lint": "gts lint",
@@ -50,11 +55,11 @@
     "prepare": "npm run compile",
     "pretest": "npm run compile",
     "posttest": "npm run lint",
-    "all": "npm-run-all -p test build",
+    "all": "npm-run-all -s build -p test docs",
     "clean": "npm-run-all -p clean:gts clean:pack",
-    "clean:pack": "rimraf --glob js-channel-*.tgz",
+    "clean:pack": "rimraf --glob js-chan-*.tgz",
     "test": "npm-run-all -p lint jest typecheck",
-    "build": "npm-run-all -s clean:gts -p compile -s docs",
+    "build": "npm-run-all -s clean:gts compile",
     "jest": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "docs": "documentation readme src/index.ts --section API -q --parse-extension ts",
     "release": "npm run -s build -s && npm t && git tag v$npm_package_version && git push && git push --tags && npm publish",

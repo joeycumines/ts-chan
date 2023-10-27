@@ -1,45 +1,18 @@
-/**
- * Concurrency primitives for TypeScript and JavaScript.
- */
+export {type SelectCase, recv, send} from './case';
 
-console.log('Try npm run lint/fix!');
+export {Chan} from './chan';
 
-const longString =
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer ut aliquet diam.';
+export {
+  type Receiver,
+  type ReceiverCallback,
+  type Receivable,
+  getReceiver,
+  type Sender,
+  type SenderCallback,
+  type Sendable,
+  getSender,
+  SendOnClosedChannelError,
+  CloseOfClosedChannelError,
+} from './protocol';
 
-const trailing = 'Semicolon';
-
-const why = {am: 'I tabbed?'};
-
-const iWish = "I didn't have a trailing space...";
-
-const sicilian = true;
-
-const vizzini = sicilian ? !sicilian : sicilian;
-
-const re = /foo {3}bar/;
-
-/**
- * Testing the documentation generation.
- *
- * @param withThis
- * @param andThat
- * @param andThose
- */
-export function doSomeStuff(
-  withThis: string,
-  andThat: string,
-  andThose: string[]
-) {
-  //function on one line
-  if (!andThose.length) {
-    return false;
-  }
-  console.log(withThis);
-  console.log(andThat);
-  console.dir(andThose);
-  console.log(longString, trailing, why, iWish, vizzini, re);
-  return;
-}
-
-// TODO: more examples
+export {type SelectCases, type UnwrapSelectCase, Select} from './select';
