@@ -29,10 +29,16 @@ browsers.
     *   [Parameters](#parameters-1)
 *   [Chan](#chan)
     *   [Parameters](#parameters-2)
+    *   [capacity](#capacity)
+    *   [length](#length)
     *   [concurrency](#concurrency)
     *   [trySend](#trysend)
         *   [Parameters](#parameters-3)
+    *   [send](#send-1)
+        *   [Parameters](#parameters-4)
     *   [tryRecv](#tryrecv)
+    *   [recv](#recv-1)
+        *   [Parameters](#parameters-5)
 *   [Receiver](#receiver)
     *   [Properties](#properties)
     *   [addReceiver](#addreceiver)
@@ -51,17 +57,17 @@ browsers.
     *   [Properties](#properties-3)
 *   [getSender](#getsender)
 *   [SendOnClosedChannelError](#sendonclosedchannelerror)
-    *   [Parameters](#parameters-4)
-*   [CloseOfClosedChannelError](#closeofclosedchannelerror)
-    *   [Parameters](#parameters-5)
-*   [Select](#select)
     *   [Parameters](#parameters-6)
+*   [CloseOfClosedChannelError](#closeofclosedchannelerror)
+    *   [Parameters](#parameters-7)
+*   [Select](#select)
+    *   [Parameters](#parameters-8)
     *   [cases](#cases)
     *   [poll](#poll)
     *   [wait](#wait)
-        *   [Parameters](#parameters-7)
-    *   [recv](#recv-1)
-        *   [Parameters](#parameters-8)
+        *   [Parameters](#parameters-9)
+    *   [recv](#recv-2)
+        *   [Parameters](#parameters-10)
 
 ### SelectCase
 
@@ -109,6 +115,22 @@ operations.
 *   `capacity`   (optional, default `0`)
 *   `newDefaultValue` **function (): T?**&#x20;
 
+#### capacity
+
+Returns the maximum number of items the channel can buffer.
+
+Type: [number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)
+
+Returns **[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)**&#x20;
+
+#### length
+
+Returns the number of items in the channel buffer.
+
+Type: [number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)
+
+Returns **[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)**&#x20;
+
 #### concurrency
 
 Returns an integer representing the number of blocking operations.
@@ -133,6 +155,18 @@ Will throw [SendOnClosedChannelError](#sendonclosedchannelerror) if the channel 
 
 Returns **[boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean)**&#x20;
 
+#### send
+
+Sends a value to the channel, returning a promise that resolves when it
+has been received, and rejects on error, or on abort signal.
+
+##### Parameters
+
+*   `value` **T**&#x20;
+*   `abort` **AbortSignal?**&#x20;
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)\<void>**&#x20;
+
 #### tryRecv
 
 Like [trySend](trySend), this performs a synchronous recv operation on the
@@ -140,6 +174,18 @@ channel, returning undefined if no value is available, or an iterator
 result, which models the received value, and whether the channel is open.
 
 Returns **(IteratorResult\<T, (T | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))> | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))**&#x20;
+
+#### recv
+
+Receives a value from the channel, returning a promise that resolves with
+an iterator (the value OR indicator that the channel is closed, possibly
+with a default value), or rejects on error, or on abort signal.
+
+##### Parameters
+
+*   `abort` **AbortSignal?**&#x20;
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)\<IteratorResult\<T, (T | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))>>**&#x20;
 
 ### Receiver
 

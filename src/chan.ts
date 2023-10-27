@@ -33,6 +33,9 @@ export class Chan<T>
     this.#recvs = [];
   }
 
+  /**
+   * Returns the maximum number of items the channel can buffer.
+   */
   get capacity(): number {
     if (this.#buffer === undefined) {
       return 0;
@@ -40,6 +43,9 @@ export class Chan<T>
     return this.#buffer.capacity;
   }
 
+  /**
+   * Returns the number of items in the channel buffer.
+   */
   get length(): number {
     if (this.#buffer === undefined) {
       return 0;
@@ -80,6 +86,10 @@ export class Chan<T>
     return false;
   }
 
+  /**
+   * Sends a value to the channel, returning a promise that resolves when it
+   * has been received, and rejects on error, or on abort signal.
+   */
   send(value: T, abort?: AbortSignal): Promise<void> {
     try {
       if (this.trySend(value)) {
@@ -150,6 +160,11 @@ export class Chan<T>
     return undefined;
   }
 
+  /**
+   * Receives a value from the channel, returning a promise that resolves with
+   * an iterator (the value OR indicator that the channel is closed, possibly
+   * with a default value), or rejects on error, or on abort signal.
+   */
   recv(abort?: AbortSignal): Promise<IteratorResult<T, T | undefined>> {
     try {
       {
