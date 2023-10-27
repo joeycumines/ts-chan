@@ -131,6 +131,10 @@ export class Select<T extends readonly unknown[] | []> {
     return undefined;
   }
 
+  /**
+   * Wait returns a promise that will resolve with the index of the next case
+   * that is ready, or reject with the first error.
+   */
   async wait(abort?: AbortSignal): Promise<number> {
     abort?.throwIfAborted();
 

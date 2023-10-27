@@ -58,8 +58,10 @@ browsers.
     *   [Parameters](#parameters-6)
     *   [cases](#cases)
     *   [poll](#poll)
-    *   [recv](#recv-1)
+    *   [wait](#wait)
         *   [Parameters](#parameters-7)
+    *   [recv](#recv-1)
+        *   [Parameters](#parameters-8)
 
 ### SelectCase
 
@@ -355,6 +357,17 @@ This is effectively a non-blocking version of [wait](wait), and fills the
 same role as the `default` select case, in Go's select statement.
 
 Returns **([number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number) | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))**&#x20;
+
+#### wait
+
+Wait returns a promise that will resolve with the index of the next case
+that is ready, or reject with the first error.
+
+##### Parameters
+
+*   `abort` **AbortSignal?**&#x20;
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)<[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)>**&#x20;
 
 #### recv
 
