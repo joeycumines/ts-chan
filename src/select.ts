@@ -20,6 +20,13 @@ export type UnwrapSelectCase<T> = T extends SelectCase<infer U>
  * for support cases comprised of {@link Sender}, {@link Receiver}, or values
  * (resolved as promises), which are treated as a single-value never-closed
  * channel.
+ *
+ * @param {Array<SelectCase|Promise|*>} cases The cases to select from, which
+ *   must be initialized using {@link .send}, {@link .recv}, unless they are
+ *   to be treated as a promise.
+ *
+ * @template T Array of cases to select from, providing type support for
+ *   received values. See also {@link cases} and {@link recv}.
  */
 export class Select<T extends readonly unknown[] | []> {
   // Input cases, after converting any non-cases to the promise variant.
@@ -68,9 +75,49 @@ export class Select<T extends readonly unknown[] | []> {
   }
 
   /**
-   * The cases for this select. When receiving a value, callers must provide
-   * one of these, the index for which is determined by the return value of
-   * either {@link poll} or {@link wait}.
+   * Retrieves the cases associated with this select instance.
+   *
+   * Each case corresponds to an input case (including order).
+   * After selecting a case, via {@link poll} or {@link wait}, received values
+   * may be retrieved by calling {@link recv} with the corresponding case.
+   *
+   * @example
+   * Accessing a (typed) received value:
+   * ```ts
+   * import {recv} from 'ts-chan';
+   *
+   * const ch1 = new Chan<number>();
+   * const ch2 = new Chan<string>();
+   *
+   * void sendsToCh1ThenEventuallyClosesIt();
+   * void sendsToCh2();
+   *
+   * const select = new Select([recv(ch1), recv(ch2)]);
+   * for (let running = true; running;) {
+   *   const i = await select.wait();
+   *   switch (i) {
+   *   case 0: {
+   *     const v = select.recv(select.cases[i]);
+   *     if (v.done) {
+   *       running = false;
+   *       break;
+   *     }
+   *     console.log(`rounded value: ${Math.round(v.value)}`);
+   *     break;
+   *   }
+   *   case 1: {
+   *     const v = select.recv(select.cases[i]);
+   *     if (v.done) {
+   *       throw new Error('ch2 unexpectedly closed');
+   *     }
+   *     console.log(`uppercase string value: ${v.value.toUpperCase()}`);
+   *     break;
+   *   }
+   *   default:
+   *     throw new Error('unreachable');
+   *   }
+   * }
+   * ```
    */
   get cases(): SelectCases<T> {
     return this.#cases;
@@ -80,6 +127,7 @@ export class Select<T extends readonly unknown[] | []> {
    * Poll returns the next case that is ready, or undefined if none are
    * ready. It must not be called concurrently with {@link wait} or
    * {@link recv}.
+   *
    * This is effectively a non-blocking version of {@link wait}, and fills the
    * same role as the `default` select case, in Go's select statement.
    */

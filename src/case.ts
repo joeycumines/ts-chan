@@ -13,6 +13,7 @@ export const selectState = Symbol('ts-chan.selectState');
 
 /**
  * SelectCase models the state of a single case in a {@link Select}.
+ *
  * WARNING: The selectState symbol is deliberately not exported, as the
  * value of `SelectCase[selectState]` is not part of the API contract, and
  * is simply a mechanism to support typing.
