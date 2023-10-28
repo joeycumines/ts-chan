@@ -38,13 +38,13 @@
   "type": "module",
   "source": "src/index.ts",
   "types": "build/src/index.d.ts",
-  "main": "build/ts-chan.js",
+  "main": "build/ts-chan.cjs",
   "module": "build/ts-chan.mjs",
   "unpkg": "build/ts-chan.umd.js",
   "exports": {
     "types": "./build/src/index.d.ts",
     "import": "./build/ts-chan.mjs",
-    "require": "./build/ts-chan.js",
+    "require": "./build/ts-chan.cjs",
     "default": "./build/ts-chan.mjs"
   },
   "scripts": {
