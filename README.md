@@ -2,6 +2,8 @@
 
 Concurrency primitives for TypeScript and JavaScript.
 
+[![NPM Package](https://img.shields.io/badge/NPM-ts--chan-brightgreen)](https://www.npmjs.com/package/ts-chan)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-ts--chan-blue)](https://github.com/joeycumines/ts-chan)
 [![Code Style: Google](https://img.shields.io/badge/code%20style-google-blueviolet.svg)](https://github.com/google/gts)
 
 ## Introduction
