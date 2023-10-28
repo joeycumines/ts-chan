@@ -1,6 +1,4 @@
-export {type SelectCase, recv, send} from './case';
-
-export {Chan} from './chan';
+export {Chan, type ChanAsyncIterator, type ChanIterator} from './chan';
 
 export {
   type Receiver,
@@ -14,5 +12,7 @@ export {
   SendOnClosedChannelError,
   CloseOfClosedChannelError,
 } from './protocol';
+
+export {type SelectCase, recv, send} from './case';
 
 export {type SelectCases, type UnwrapSelectCase, Select} from './select';

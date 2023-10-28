@@ -15,9 +15,22 @@ import {CircularBuffer} from './buffer';
 /**
  * Provides a communication mechanism between two or more concurrent
  * operations.
+ *
+ * In addition to various utility methods, it implements:
+ *
+ * - {@link Sendable} and {@link Sender} (including {@link Sender.close}).
+ * - {@link Receivable} and {@link Receiver}
+ * - {@link Iterable} (see also {@link ChanIterator})
+ * - {@link AsyncIterable} (see also {@link ChanAsyncIterator})
  */
 export class Chan<T>
-  implements Sender<T>, Sendable<T>, Receiver<T>, Receivable<T>
+  implements
+    Sender<T>,
+    Sendable<T>,
+    Receiver<T>,
+    Receivable<T>,
+    Iterable<T>,
+    AsyncIterable<T>
 {
   #buffer: CircularBuffer<T> | undefined;
   #newDefaultValue: (() => T) | undefined;
@@ -31,6 +44,14 @@ export class Chan<T>
     this.#open = true;
     this.#sends = [];
     this.#recvs = [];
+  }
+
+  [Symbol.asyncIterator](): ChanAsyncIterator<T> {
+    return new ChanAsyncIterator(this);
+  }
+
+  [Symbol.iterator](): ChanIterator<T> {
+    return new ChanIterator(this);
   }
 
   /**
@@ -92,6 +113,7 @@ export class Chan<T>
    */
   send(value: T, abort?: AbortSignal): Promise<void> {
     try {
+      abort?.throwIfAborted();
       if (this.trySend(value)) {
         return Promise.resolve();
       }
@@ -167,6 +189,7 @@ export class Chan<T>
    */
   recv(abort?: AbortSignal): Promise<IteratorResult<T, T | undefined>> {
     try {
+      abort?.throwIfAborted();
       {
         const result = this.tryRecv();
         if (result !== undefined) {
@@ -255,6 +278,27 @@ export class Chan<T>
     return true;
   }
 
+  /**
+   * Closes the channel, preventing further sending of values.
+   *
+   * See also {@link Sender} and {@link Sender.close}, which this implements.
+   *
+   * - Once a channel is closed, no more values can be sent to it.
+   * - If the channel is buffered and there are still values in the buffer when
+   *   the channel is closed, receivers will continue to receive those values
+   *   until the buffer is empty.
+   * - Attempting to send to a closed channel will result in an error and
+   *   unblock any senders.
+   * - If the channel is already closed, calling `close` again will throw a
+   *   {@link CloseOfClosedChannelError}.
+   * - This method should be used to signal the end of data transmission or
+   *   prevent potential deadlocks.
+   *
+   * @throws {CloseOfClosedChannelError} When attempting to close a channel
+   *   that is already closed.
+   * @throws {Error} When an error occurs while closing the channel, and no
+   *   other specific error is thrown.
+   */
   close(): void {
     if (!this.#open) {
       throw new CloseOfClosedChannelError();
@@ -266,9 +310,10 @@ export class Chan<T>
 
     if (this.#recvs.length !== 0) {
       for (let i = 0; i < this.#recvs.length; i++) {
+        const callback = this.#recvs[i];
+        this.#recvs[i] = undefined!;
         try {
-          this.#recvs[i](this.#newDefaultValue?.(), false);
-          this.#recvs[i] = undefined!;
+          callback(this.#newDefaultValue?.(), false);
         } catch (e: unknown) {
           lastError =
             e ??
@@ -299,9 +344,10 @@ export class Chan<T>
     if (this.#sends.length !== 0) {
       const err = new SendOnClosedChannelError();
       for (let i = 0; i < this.#sends.length; i++) {
+        const callback = this.#sends[i];
+        this.#sends[i] = undefined!;
         try {
-          this.#sends[i](err, false);
-          this.#sends[i] = undefined!;
+          callback(err, false);
         } catch (e: unknown) {
           if (e !== err) {
             lastError =
@@ -364,3 +410,131 @@ export class Chan<T>
     }
   }
 }
+
+/**
+ * Iterates on all available values. May alternate between returning done and
+ * not done, unless {@link ChanIterator.return} or {@link ChanIterator.throw}
+ * are called.
+ *
+ * Only the type is exported - may be initialized only performing an
+ * iteration on a {@link Chan} instance, or by calling
+ * `chan[Symbol.iterator]()`.
+ */
+export class ChanIterator<T> implements Iterable<T>, Iterator<T> {
+  #chan: Chan<T>;
+  #outcome?: 'Return' | 'Throw';
+  #error?: unknown;
+
+  constructor(chan: Chan<T>) {
+    this.#chan = chan;
+  }
+
+  /**
+   * Returns this.
+   */
+  [Symbol.iterator](): Iterator<T> {
+    return this;
+  }
+
+  /**
+   * Next iteration.
+   */
+  next(): IteratorResult<T> {
+    switch (this.#outcome) {
+      case undefined: {
+        const result = this.#chan.tryRecv();
+        if (result !== undefined) {
+          return result;
+        }
+        // note: not necessarily a permanent condition
+        return {done: true, value: undefined};
+      }
+      case 'Return':
+        return {done: true, value: undefined};
+      case 'Throw':
+        throw this.#error;
+    }
+  }
+
+  /**
+   * Ends the iterator, which is an idempotent operation.
+   */
+  return(): IteratorResult<T> {
+    if (this.#outcome === undefined) {
+      this.#outcome = 'Return';
+    }
+    return {done: true, value: undefined};
+  }
+
+  /**
+   * Ends the iterator with an error, which is an idempotent operation.
+   */
+  throw(e?: unknown): IteratorResult<T> {
+    if (this.#outcome === undefined) {
+      this.#outcome = 'Throw';
+      this.#error = e;
+    }
+    return {done: true, value: undefined};
+  }
+}
+
+/**
+ * Iterates by receiving values from the channel, until it is closed, or the
+ * {@link ChanAsyncIterator.return} or {@link ChanAsyncIterator.throw} methods
+ * are called.
+ *
+ * Only the type is exported - may be initialized only performing an async
+ * iteration on a {@link Chan} instance, or by calling
+ * `chan[Symbol.asyncIterator]()`.
+ */
+export class ChanAsyncIterator<T>
+  implements AsyncIterable<T>, AsyncIterator<T>
+{
+  #chan: Chan<T>;
+  #abort: AbortController;
+
+  constructor(chan: Chan<T>) {
+    this.#chan = chan;
+    this.#abort = new AbortController();
+  }
+
+  /**
+   * Returns this.
+   */
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return this;
+  }
+
+  /**
+   * Next iteration.
+   */
+  async next(): Promise<IteratorResult<T>> {
+    try {
+      return await this.#chan.recv(this.#abort.signal);
+    } catch (e) {
+      if (e === chanAsyncIteratorReturned) {
+        return {done: true, value: undefined};
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Ends the iterator, which is an idempotent operation.
+   */
+  async return(): Promise<IteratorResult<T>> {
+    this.#abort.abort(chanAsyncIteratorReturned);
+    return {done: true, value: undefined};
+  }
+
+  /**
+   * Ends the iterator with an error, which is an idempotent operation.
+   */
+  async throw(e?: unknown): Promise<IteratorResult<T>> {
+    this.#abort.abort(e);
+    return {done: true, value: undefined};
+  }
+}
+
+// sentinel value used as the reason for abort on ChanAsyncIterator.return
+const chanAsyncIteratorReturned = Symbol('ts-chan.chanAsyncIteratorReturned');

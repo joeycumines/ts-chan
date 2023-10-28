@@ -488,9 +488,11 @@ describe('Chan', () => {
         .mockImplementationOnce(() => {
           throw someErr;
         });
+      const throwIfAborted = jest.fn<AbortSignal['throwIfAborted']>();
       const mockAbortSignal = {
         addEventListener,
         removeEventListener,
+        throwIfAborted,
       } as Partial<AbortSignal> as AbortSignal;
       const sendPromise = chan.send(123, mockAbortSignal);
       expect(addEventListener).toBeCalledTimes(1);
@@ -519,9 +521,11 @@ describe('Chan', () => {
         .mockImplementationOnce(() => {
           throw someErr;
         });
+      const throwIfAborted = jest.fn<AbortSignal['throwIfAborted']>();
       const mockAbortSignal = {
         addEventListener,
         removeEventListener,
+        throwIfAborted,
       } as Partial<AbortSignal> as AbortSignal;
       const sendPromise = chan.send(123, mockAbortSignal);
       expect(addEventListener).toBeCalledTimes(1);
@@ -673,5 +677,182 @@ describe('Chan', () => {
         ],
       ]);
     });
+  });
+});
+
+describe('ChanIterator', () => {
+  test('receives all values correctly when you send asynchronously no buffer', async () => {
+    const chan = new Chan<number>();
+    const promises: Array<Promise<unknown>> = [];
+    for (let i = 0; i < 5; i++) {
+      promises.push(chan.send(i));
+    }
+    const out: number[] = [];
+    for (const v of chan) {
+      out.push(v);
+    }
+    expect(out).toStrictEqual([0, 1, 2, 3, 4]);
+    chan.close();
+    await Promise.all(promises);
+  });
+
+  test('iterate on buffered channel synchronously', () => {
+    const chan = new Chan<number>(5);
+    for (let i = chan.length; i < chan.capacity; i++) {
+      expect(chan.trySend(i)).toBe(true);
+    }
+    const values: number[] = [];
+    for (const value of chan) {
+      values.push(value);
+    }
+    expect(values).toStrictEqual([0, 1, 2, 3, 4]);
+    expect(Array.from(chan)).toStrictEqual([]);
+    expect(chan.trySend(55)).toBe(true);
+    expect(Array.from(chan)).toStrictEqual([55]);
+    expect(chan.trySend(-1)).toBe(true);
+    const iter = chan[Symbol.iterator]();
+    for (let i = -2; i > -5; i--) {
+      expect(iter.next()).toStrictEqual({value: i + 1});
+      expect(chan.trySend(i)).toBe(true);
+    }
+    expect(iter.next()).toStrictEqual({value: -4});
+    expect(iter.next()).toStrictEqual({value: undefined, done: true});
+    expect(iter.next()).toStrictEqual({value: undefined, done: true});
+    expect(chan.trySend(Number.MAX_VALUE)).toBe(true);
+    expect(iter.next()).toStrictEqual({value: Number.MAX_VALUE});
+    for (let i = chan.length; i < chan.capacity; i++) {
+      expect(chan.trySend(i)).toBe(true);
+    }
+    expect(iter).not.toBe(chan[Symbol.iterator]());
+    const out: number[] = [];
+    const expectedErr = new Error('some error');
+    let didNotThrowOnThrowCall = 0;
+    try {
+      for (const v of iter) {
+        out.push(v);
+        if (v === 2) {
+          iter.throw(expectedErr);
+          didNotThrowOnThrowCall++;
+        }
+      }
+      expect('should have thrown').toBe('did not throw');
+    } catch (e: unknown) {
+      expect(e).toBe(expectedErr);
+    }
+    expect(out).toStrictEqual([0, 1, 2]);
+    expect(didNotThrowOnThrowCall).toBe(1);
+    iter.return();
+    iter.throw('something else');
+    try {
+      iter.next();
+      expect('should have thrown').toBe('did not throw');
+    } catch (e: unknown) {
+      expect(e).toBe(expectedErr);
+    }
+    expect(chan.length).toBe(2);
+    for (let i = chan.length; i < chan.capacity; i++) {
+      expect(chan.trySend(i + 3)).toBe(true);
+    }
+    out.length = 0;
+    for (const v of chan) {
+      out.push(v);
+      if (v === 5) {
+        chan.close();
+      }
+    }
+    expect(out).toStrictEqual([3, 4, 5, 6, 7]);
+  });
+});
+
+describe('ChanAsyncIterator', () => {
+  test('receives all values correctly when you send then close', async () => {
+    const chan = new Chan<number>();
+    await Promise.all([
+      (async () => {
+        for (let i = 0; i < 5; i++) {
+          await chan.send(i);
+        }
+        chan.close();
+      })(),
+      (async () => {
+        const out: number[] = [];
+        for await (const v of chan) {
+          out.push(v);
+        }
+        expect(out).toStrictEqual([0, 1, 2, 3, 4]);
+      })(),
+    ]);
+  });
+
+  test('unblocks on return', async () => {
+    const chan = new Chan<number>(5);
+    for (let i = chan.length; i < chan.capacity; i++) {
+      expect(chan.trySend(i)).toBe(true);
+    }
+    const iter = chan[Symbol.asyncIterator]();
+    const values: number[] = [];
+    await Promise.all([
+      (async () => {
+        for await (const value of iter) {
+          values.push(value);
+        }
+      })(),
+      (async () => {
+        // poll rapidly until chan has a length of 0, then call iter.return
+        while (chan.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        await iter.return();
+      })(),
+    ]);
+    expect(values).toStrictEqual([0, 1, 2, 3, 4]);
+  });
+
+  test('unblocks on throw for async iterator', async () => {
+    const chan = new Chan<number>(5);
+    for (let i = chan.length; i < chan.capacity; i++) {
+      expect(chan.trySend(i)).toBe(true);
+    }
+    const iter = chan[Symbol.asyncIterator]();
+    const values: number[] = [];
+    const expectedErr = new Error('some error');
+    let didNotThrowOnThrowCall = 0;
+
+    await Promise.all([
+      (async () => {
+        try {
+          for await (const value of iter) {
+            values.push(value);
+            if (value === 2) {
+              await iter.throw(expectedErr);
+              didNotThrowOnThrowCall++;
+            }
+          }
+          expect('should have thrown').toBe('did not throw');
+        } catch (e: unknown) {
+          expect(e).toBe(expectedErr);
+        }
+      })(),
+      (async () => {
+        // poll rapidly until chan has a length of 2, then call iter.throw
+        while (chan.length > 2) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        await iter.throw(expectedErr);
+      })(),
+    ]);
+
+    expect(values).toStrictEqual([0, 1, 2]);
+    expect(didNotThrowOnThrowCall).toBe(1);
+
+    // Once the iterator has thrown, all subsequent calls should also throw the same error
+    try {
+      await iter.next();
+      expect('should have thrown').toBe('did not throw');
+    } catch (e: unknown) {
+      expect(e).toBe(expectedErr);
+    }
+
+    expect(chan.length).toBe(2);
   });
 });

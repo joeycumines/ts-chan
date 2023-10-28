@@ -8,9 +8,9 @@ Concurrency primitives for TypeScript and JavaScript.
 
 Concurrency in JavaScript, frankly, sucks.
 
-This module is a concerted effort to provide concurrency primitives for
-TypeScript/JavaScript which capture (as much of) the semantics of Go's
-channels as possible, while still being idiomatic to the language.
+This module is an effort to provide concurrency primitives for
+TypeScript/JavaScript that capture as much of the semantics of Go's channels as
+possible, while remaining idiomatic to the language.
 
 I'll be iterating on this for a few weeks, in my spare time, with the goal of
 a production-ready module, which can be used any JS environment, including
@@ -40,9 +40,9 @@ supports buffered channel semantics.
 Unlike Go's channel, all sends and receives are processed in FIFO order,
 allowing it to function as a queue, if desired.
 Also provided are a number of convenience methods and properties, that are not
-part of the core protocol, but are useful for common use cases. These include
-the methods `send`, `recv`, `trySend`, `tryRecv`, and the properties `length`,
-`capacity`, and `concurrency`.
+part of the core protocol, but are useful for common use cases.
+
+See the [API documentation](#api) for more details.
 
 ### Select class
 
@@ -107,23 +107,33 @@ also supported, though they have no analogue, in Go.
 
 #### Table of Contents
 
-*   [SelectCase](#selectcase)
-*   [recv](#recv)
-    *   [Parameters](#parameters)
-*   [send](#send)
-    *   [Parameters](#parameters-1)
 *   [Chan](#chan)
-    *   [Parameters](#parameters-2)
+    *   [Parameters](#parameters)
     *   [capacity](#capacity)
     *   [length](#length)
     *   [concurrency](#concurrency)
     *   [trySend](#trysend)
-        *   [Parameters](#parameters-3)
-    *   [send](#send-1)
-        *   [Parameters](#parameters-4)
+        *   [Parameters](#parameters-1)
+    *   [send](#send)
+        *   [Parameters](#parameters-2)
     *   [tryRecv](#tryrecv)
-    *   [recv](#recv-1)
+    *   [recv](#recv)
+        *   [Parameters](#parameters-3)
+    *   [close](#close)
+*   [ChanIterator](#chaniterator)
+    *   [Parameters](#parameters-4)
+    *   [iterator](#iterator)
+    *   [next](#next)
+    *   [return](#return)
+    *   [throw](#throw)
         *   [Parameters](#parameters-5)
+*   [ChanAsyncIterator](#chanasynciterator)
+    *   [Parameters](#parameters-6)
+    *   [asyncIterator](#asynciterator)
+    *   [next](#next-1)
+    *   [return](#return-1)
+    *   [throw](#throw-1)
+        *   [Parameters](#parameters-7)
 *   [Receiver](#receiver)
     *   [Properties](#properties)
     *   [addReceiver](#addreceiver)
@@ -136,66 +146,41 @@ also supported, though they have no analogue, in Go.
     *   [Properties](#properties-2)
     *   [addSender](#addsender)
     *   [removeSender](#removesender)
-    *   [close](#close)
+    *   [close](#close-1)
 *   [SenderCallback](#sendercallback)
 *   [Sendable](#sendable)
     *   [Properties](#properties-3)
 *   [getSender](#getsender)
 *   [SendOnClosedChannelError](#sendonclosedchannelerror)
-    *   [Parameters](#parameters-6)
-*   [CloseOfClosedChannelError](#closeofclosedchannelerror)
-    *   [Parameters](#parameters-7)
-*   [Select](#select)
     *   [Parameters](#parameters-8)
+*   [CloseOfClosedChannelError](#closeofclosedchannelerror)
+    *   [Parameters](#parameters-9)
+*   [SelectCase](#selectcase)
+*   [recv](#recv-1)
+    *   [Parameters](#parameters-10)
+*   [send](#send-1)
+    *   [Parameters](#parameters-11)
+*   [Select](#select)
+    *   [Parameters](#parameters-12)
     *   [cases](#cases)
         *   [Examples](#examples)
     *   [poll](#poll)
     *   [wait](#wait)
-        *   [Parameters](#parameters-9)
+        *   [Parameters](#parameters-13)
     *   [recv](#recv-2)
-        *   [Parameters](#parameters-10)
-
-### SelectCase
-
-SelectCase models the state of a single case in a [Select](#select).
-
-WARNING: The selectState symbol is deliberately not exported, as the
-value of `SelectCase[selectState]` is not part of the API contract, and
-is simply a mechanism to support typing.
-
-Type: (SelectCaseSender\<T> | SelectCaseReceiver\<T> | SelectCasePromise\<T>)
-
-### recv
-
-Prepares a [SelectCaseReceiver](SelectCaseReceiver) case, to be used in a [Select](#select).
-
-WARNING: Cases may only be used in a single select instance, though select
-instances are intended to be reused, e.g. when implementing control loops.
-
-#### Parameters
-
-*   `from` **([Receivable](#receivable)\<T> | [Receiver](#receiver)\<T>)**&#x20;
-
-Returns **SelectCaseReceiver\<T>**&#x20;
-
-### send
-
-Prepares a [SelectCaseSender](SelectCaseSender) case, to be used in a [Select](#select).
-
-WARNING: Cases may only be used in a single select instance, though select
-instances are intended to be reused, e.g. when implementing control loops.
-
-#### Parameters
-
-*   `to` **([Sendable](#sendable)\<T> | [Sender](#sender)\<T>)**&#x20;
-*   `scb` **[SenderCallback](#sendercallback)\<T>**&#x20;
-
-Returns **SelectCaseSender\<T>**&#x20;
+        *   [Parameters](#parameters-14)
 
 ### Chan
 
 Provides a communication mechanism between two or more concurrent
 operations.
+
+In addition to various utility methods, it implements:
+
+*   [Sendable](#sendable) and [Sender](#sender) (including [Sender.close](#senderclose)).
+*   [Receivable](#receivable) and [Receiver](#receiver)
+*   [Iterable](Iterable) (see also [ChanIterator](#chaniterator))
+*   [AsyncIterable](AsyncIterable) (see also [ChanAsyncIterator](#chanasynciterator))
 
 #### Parameters
 
@@ -273,6 +258,116 @@ with a default value), or rejects on error, or on abort signal.
 *   `abort` **AbortSignal?**&#x20;
 
 Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)\<IteratorResult\<T, (T | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))>>**&#x20;
+
+#### close
+
+Closes the channel, preventing further sending of values.
+
+See also [Sender](#sender) and [Sender.close](#senderclose), which this implements.
+
+*   Once a channel is closed, no more values can be sent to it.
+*   If the channel is buffered and there are still values in the buffer when
+    the channel is closed, receivers will continue to receive those values
+    until the buffer is empty.
+*   Attempting to send to a closed channel will result in an error and
+    unblock any senders.
+*   If the channel is already closed, calling `close` again will throw a
+    [CloseOfClosedChannelError](#closeofclosedchannelerror).
+*   This method should be used to signal the end of data transmission or
+    prevent potential deadlocks.
+
+<!---->
+
+*   Throws **[CloseOfClosedChannelError](#closeofclosedchannelerror)** When attempting to close a channel
+    that is already closed.
+*   Throws **[Error](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Error)** When an error occurs while closing the channel, and no
+    other specific error is thrown.
+
+Returns **void**&#x20;
+
+### ChanIterator
+
+Iterates on all available values. May alternate between returning done and
+not done, unless [ChanIterator.return](ChanIterator.return) or [ChanIterator.throw](ChanIterator.throw)
+are called.
+
+Only the type is exported - may be initialized only performing an
+iteration on a [Chan](#chan) instance, or by calling
+`chan[Symbol.iterator]()`.
+
+#### Parameters
+
+*   `chan` **[Chan](#chan)\<T>**&#x20;
+
+#### iterator
+
+Returns this.
+
+Returns **Iterator\<T>**&#x20;
+
+#### next
+
+Next iteration.
+
+Returns **IteratorResult\<T>**&#x20;
+
+#### return
+
+Ends the iterator, which is an idempotent operation.
+
+Returns **IteratorResult\<T>**&#x20;
+
+#### throw
+
+Ends the iterator with an error, which is an idempotent operation.
+
+##### Parameters
+
+*   `e` **any?**&#x20;
+
+Returns **IteratorResult\<T>**&#x20;
+
+### ChanAsyncIterator
+
+Iterates by receiving values from the channel, until it is closed, or the
+[ChanAsyncIterator.return](ChanAsyncIterator.return) or [ChanAsyncIterator.throw](ChanAsyncIterator.throw) methods
+are called.
+
+Only the type is exported - may be initialized only performing an async
+iteration on a [Chan](#chan) instance, or by calling
+`chan[Symbol.asyncIterator]()`.
+
+#### Parameters
+
+*   `chan` **[Chan](#chan)\<T>**&#x20;
+
+#### asyncIterator
+
+Returns this.
+
+Returns **AsyncIterator\<T>**&#x20;
+
+#### next
+
+Next iteration.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)\<IteratorResult\<T>>**&#x20;
+
+#### return
+
+Ends the iterator, which is an idempotent operation.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)\<IteratorResult\<T>>**&#x20;
+
+#### throw
+
+Ends the iterator with an error, which is an idempotent operation.
+
+##### Parameters
+
+*   `e` **any?**&#x20;
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)\<IteratorResult\<T>>**&#x20;
 
 ### Receiver
 
@@ -459,6 +554,43 @@ once.
 #### Parameters
 
 *   `args` **...ConstructorParameters\<any>**&#x20;
+
+### SelectCase
+
+SelectCase models the state of a single case in a [Select](#select).
+
+WARNING: The selectState symbol is deliberately not exported, as the
+value of `SelectCase[selectState]` is not part of the API contract, and
+is simply a mechanism to support typing.
+
+Type: (SelectCaseSender\<T> | SelectCaseReceiver\<T> | SelectCasePromise\<T>)
+
+### recv
+
+Prepares a [SelectCaseReceiver](SelectCaseReceiver) case, to be used in a [Select](#select).
+
+WARNING: Cases may only be used in a single select instance, though select
+instances are intended to be reused, e.g. when implementing control loops.
+
+#### Parameters
+
+*   `from` **([Receivable](#receivable)\<T> | [Receiver](#receiver)\<T>)**&#x20;
+
+Returns **SelectCaseReceiver\<T>**&#x20;
+
+### send
+
+Prepares a [SelectCaseSender](SelectCaseSender) case, to be used in a [Select](#select).
+
+WARNING: Cases may only be used in a single select instance, though select
+instances are intended to be reused, e.g. when implementing control loops.
+
+#### Parameters
+
+*   `to` **([Sendable](#sendable)\<T> | [Sender](#sender)\<T>)**&#x20;
+*   `scb` **[SenderCallback](#sendercallback)\<T>**&#x20;
+
+Returns **SelectCaseSender\<T>**&#x20;
 
 ### Select
 
