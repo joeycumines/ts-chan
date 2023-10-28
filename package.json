@@ -43,14 +43,14 @@
   "unpkg": "build/ts-chan.umd.js",
   "exports": {
     "types": "./build/src/index.d.ts",
-    "import": "./build/ts-chan.mjs",
+    "import": "./build/ts-chan.modern.mjs",
     "require": "./build/ts-chan.cjs",
-    "default": "./build/ts-chan.mjs"
+    "default": "./build/ts-chan.modern.mjs"
   },
   "scripts": {
     "lint": "gts lint",
     "clean:gts": "gts clean",
-    "compile": "microbundle -f esm,cjs,umd && rimraf build/types && mv build/src build/types && rimraf build/src build/test && mv build/types/src build/src && mv build/types/test build/test && rimraf build/types",
+    "compile": "microbundle -f modern,esm,cjs,umd && rimraf build/types && mv build/src build/types && rimraf build/src build/test && mv build/types/src build/src && mv build/types/test build/test && rimraf build/types",
     "fix": "gts fix",
     "prepare": "npm run compile",
     "pretest": "npm run compile",
