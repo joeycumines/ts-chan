@@ -4,12 +4,17 @@ import {
   type SelectCaseSender,
   type SelectCaseReceiver,
   type CaseStatePromise,
+  newLockedSenderCallback,
+  type SelectSemaphoreToken,
+  newLockedReceiverCallback,
 } from './case';
 import {random as mathRandom} from './math';
 
 export type SelectCases<T extends readonly unknown[] | []> = {
   readonly [P in keyof T]: SelectCase<UnwrapSelectCase<T[P]>>;
-} & {readonly length: number};
+} & {
+  readonly length: number;
+};
 
 export type UnwrapSelectCase<T> = T extends SelectCase<infer U>
   ? U
@@ -42,7 +47,7 @@ export class Select<T extends readonly unknown[] | []> {
   #waiting: boolean;
 
   // Indicates that the pending cases should be re-shuffled before the next
-  // check, which is a synchronous operation that confirms that returns the
+  // poll, which is a synchronous operation that confirms that returns the
   // next available case, in a fair manner.
   #reshuffle: boolean;
 
@@ -55,10 +60,10 @@ export class Select<T extends readonly unknown[] | []> {
   // Used to ensure we don't buffer multiple received values.
   #next?: number;
 
-  #stopToken: StopToken;
+  #semaphore: SelectSemaphore;
 
   constructor(cases: T) {
-    this.#stopToken = {};
+    this.#semaphore = {};
     this.#cases = mapPendingValues(
       cases,
       id => {
@@ -67,7 +72,7 @@ export class Select<T extends readonly unknown[] | []> {
           throw err;
         }
       },
-      this.#stopToken
+      this.#semaphore
     );
     this.#pending = fisherYatesShuffle(this.#cases.map(v => v[selectState]));
     this.#waiting = false;
@@ -84,7 +89,7 @@ export class Select<T extends readonly unknown[] | []> {
    * @example
    * Accessing a (typed) received value:
    * ```ts
-   * import {recv} from 'ts-chan';
+   * import {recv, Chan, Select} from 'ts-chan';
    *
    * const ch1 = new Chan<number>();
    * const ch2 = new Chan<string>();
@@ -134,7 +139,14 @@ export class Select<T extends readonly unknown[] | []> {
   poll(): number | undefined {
     this.#throwIfInUse();
 
-    // consume the last wait/check, if it hasn't been consumed already
+    // sanity check - stop should always have been called
+    if (this.#semaphore.token !== undefined) {
+      throw new Error(
+        'ts-chan: select: poll: unexpected error that should never happen: stop token not cleared'
+      );
+    }
+
+    // consume the last poll/wait, if it hasn't been consumed already
     if (this.#next !== undefined) {
       this.#cases[this.#next][selectState].ok = undefined;
       this.#cases[this.#next][selectState].next = undefined;
@@ -160,17 +172,45 @@ export class Select<T extends readonly unknown[] | []> {
       }
 
       if (pending.send !== undefined) {
-        if (!pending.send.addSender(pending.scb)) {
-          this.#next = pending.cidx;
-          return this.#next;
+        if (pending.cscb !== undefined) {
+          throw new Error(
+            'ts-chan: select: poll: unexpected error that should never happen: cscb set'
+          );
         }
-        pending.send.removeSender(pending.scb);
+        this.#semaphore.token = {};
+        try {
+          const scb = newLockedSenderCallback(
+            pending.lscb,
+            this.#semaphore.token
+          );
+          if (!pending.send.addSender(scb)) {
+            this.#next = pending.cidx;
+            return this.#next;
+          }
+          pending.send.removeSender(scb);
+        } finally {
+          this.#semaphore.token = undefined;
+        }
       } else if (pending.recv !== undefined) {
-        if (!pending.recv.addReceiver(pending.rcb)) {
-          this.#next = pending.cidx;
-          return this.#next;
+        if (pending.crcb !== undefined) {
+          throw new Error(
+            'ts-chan: select: poll: unexpected error that should never happen: crcb set'
+          );
         }
-        pending.recv.removeReceiver(pending.rcb);
+        this.#semaphore.token = {};
+        try {
+          const rcb = newLockedReceiverCallback(
+            pending.lrcb,
+            this.#semaphore.token
+          );
+          if (!pending.recv.addReceiver(rcb)) {
+            this.#next = pending.cidx;
+            return this.#next;
+          }
+          pending.recv.removeReceiver(rcb);
+        } finally {
+          this.#semaphore.token = undefined;
+        }
       }
     }
 
@@ -186,7 +226,7 @@ export class Select<T extends readonly unknown[] | []> {
   async wait(abort?: AbortSignal): Promise<number> {
     abort?.throwIfAborted();
 
-    // need to call check first - avoid accidentally buffering receives
+    // need to call poll first - avoid accidentally buffering receives
     // (also consumes any this.#next value)
     {
       const i = this.poll();
@@ -197,28 +237,38 @@ export class Select<T extends readonly unknown[] | []> {
 
     this.#waiting = true;
     try {
-      // allow stop, by consuming this token (while it's set)
-      this.#stopToken.id = {};
+      // identifies misuse of callbacks + indicates if stop is allowed
+      // stop will consume this token, ensuring it's only performed once
+      // (the "select next communication" behavior doesn't apply to promises)
+      const token: SelectSemaphoreToken = {stop: true};
 
       let i: number | undefined;
       let err: unknown;
       let rejectOnAbort: Promise<void> | undefined;
       let abortListener: (() => void) | undefined;
+
       if (abort !== undefined) {
         rejectOnAbort = new Promise((resolve, reject) => {
           abortListener = () => {
-            abort.removeEventListener('abort', abortListener!);
-            err ??= this.#stop(this.#stopToken);
-            reject(abort.reason);
+            try {
+              err ??= this.#stop(token);
+              abort!.removeEventListener('abort', abortListener!);
+              reject(abort.reason);
+            } catch (e: unknown) {
+              err ??= e;
+              reject(e);
+            }
           };
-          abort.addEventListener('abort', abortListener);
         });
         if (abortListener === undefined) {
           throw new Error(
             'ts-chan: select: next: promise executor not called synchronously'
           );
         }
+        abort.addEventListener('abort', abortListener);
       }
+
+      this.#semaphore.token = token;
 
       try {
         let promise = Promise.race(this.#pending);
@@ -235,7 +285,7 @@ export class Select<T extends readonly unknown[] | []> {
           this.#buf2elem[0] = undefined;
           this.#buf2elem[1] = undefined;
         }
-        err ??= this.#stop(this.#stopToken);
+        err ??= this.#stop(token);
         abort?.removeEventListener('abort', abortListener!);
       }
 
@@ -277,8 +327,13 @@ export class Select<T extends readonly unknown[] | []> {
     }
 
     let result:
-      | (IteratorResult<T, T | undefined> & {err?: undefined})
-      | {value: unknown; err: true}
+      | (IteratorResult<T, T | undefined> & {
+          err?: undefined;
+        })
+      | {
+          value: unknown;
+          err: true;
+        }
       | undefined;
 
     if (
@@ -349,32 +404,32 @@ export class Select<T extends readonly unknown[] | []> {
   // Stops further receives or sends - this must be called as soon as
   // possible after receive (that is, actual data being received, i.e. within
   // the callback passed to addReceiver or addSender, or after the promise).
-  #stop(id: object | undefined) {
-    if (!id || this.#stopToken.id !== id) {
+  #stop(id: SelectSemaphoreToken) {
+    if (this.#semaphore.token !== id || !id.stop) {
       return;
     }
     let err: unknown;
     for (const c of this.#pending) {
-      if (c.hscb) {
-        c.hscb = false;
+      if (c.cscb !== undefined) {
         try {
-          c.send.removeSender(c.scb);
+          c.send.removeSender(c.cscb);
         } catch (e: unknown) {
           err ??=
             e ?? new Error('ts-chan: select: send: error removing sender');
         }
+        c.cscb = undefined;
       }
-      if (c.hrcb) {
-        c.hrcb = false;
+      if (c.crcb !== undefined) {
         try {
-          c.recv.removeReceiver(c.rcb);
+          c.recv.removeReceiver(c.crcb);
         } catch (e: unknown) {
           err ??=
             e ?? new Error('ts-chan: select: recv: error removing receiver');
         }
+        c.crcb = undefined;
       }
     }
-    this.#stopToken.id = undefined;
+    this.#semaphore.token = undefined;
     return err;
   }
 
@@ -385,23 +440,23 @@ export class Select<T extends readonly unknown[] | []> {
   }
 }
 
-let stopForMapPendingValue: ((id: object | undefined) => void) | undefined;
-let stopTokenForMapPendingValue: StopToken | undefined;
+let stopForMapPendingValue: ((id: SelectSemaphoreToken) => void) | undefined;
+let selectSemaphoreForMapPendingValue: SelectSemaphore | undefined;
 
 // Converts any non-cases to the promise variant, returns a new array.
 const mapPendingValues = <T extends readonly unknown[] | []>(
   cases: T,
-  stop: (id: object | undefined) => void,
-  stopToken: StopToken
+  stop: Exclude<typeof stopForMapPendingValue, undefined>,
+  selectSemaphore: Exclude<typeof selectSemaphoreForMapPendingValue, undefined>
 ) => {
   stopForMapPendingValue = stop;
-  stopTokenForMapPendingValue = stopToken;
+  selectSemaphoreForMapPendingValue = selectSemaphore;
   try {
     const mapped: SelectCase<unknown>[] = cases.map(mapPendingValue);
     return mapped as SelectCases<T>;
   } finally {
     stopForMapPendingValue = undefined;
-    stopTokenForMapPendingValue = undefined;
+    selectSemaphoreForMapPendingValue = undefined;
   }
 };
 
@@ -410,16 +465,14 @@ const mapPendingValues = <T extends readonly unknown[] | []>(
 const mapPendingValue = <T>(v: T, i: number) => {
   if (
     stopForMapPendingValue === undefined ||
-    stopTokenForMapPendingValue === undefined
+    selectSemaphoreForMapPendingValue === undefined
   ) {
     throw new Error(
       'ts-chan: select: unexpected error that should never happen: stop vars not set'
     );
   }
-
   const stop = stopForMapPendingValue;
-  const stopToken = stopTokenForMapPendingValue;
-  let stopTokenId: object | undefined;
+  const selectSemaphore = selectSemaphoreForMapPendingValue;
 
   if (isSelectCase(v)) {
     if (v[selectState].cidx !== undefined) {
@@ -435,11 +488,16 @@ const mapPendingValue = <T>(v: T, i: number) => {
     if (v[selectState].send !== undefined) {
       const s = v[selectState];
 
-      // because we need to patch the original
-      const scb = s.scb;
+      s.lscb = (token, err, ok) => {
+        if (token !== selectSemaphore.token) {
+          throw new Error(
+            'ts-chan: select: send: channel protocol misuse: callback called after remove'
+          );
+        }
 
-      s.scb = (err, ok) => {
-        s.hscb = false;
+        // always this callback (instance - bound token) or already undefined
+        s.cscb = undefined;
+
         if (!ok) {
           // failed to send - reject with error
           pendingReject?.(err);
@@ -448,9 +506,10 @@ const mapPendingValue = <T>(v: T, i: number) => {
           // throw err, as dictated by the protocol
           throw err;
         }
+
         try {
-          stop(stopTokenId);
-          const result = scb(undefined, true);
+          stop(token);
+          const result = s.oscb(undefined, true);
           s.ok = true;
           pendingResolve?.(i);
           return result;
@@ -465,47 +524,62 @@ const mapPendingValue = <T>(v: T, i: number) => {
 
       // kicks off send
       s.then = (onfulfilled, onrejected) => {
-        stopTokenId = stopToken.id;
-
         return new Promise<number>((resolve, reject) => {
-          if (s.hscb) {
-            throw new Error('ts-chan: select: send: already added sender');
+          if (selectSemaphore.token === undefined) {
+            throw new Error(
+              'ts-chan: select: send: unexpected error that should never happen: stop token not set'
+            );
           }
+          if (s.cscb !== undefined) {
+            throw new Error(
+              'ts-chan: select: send: unexpected error that should never happen: already added sender'
+            );
+          }
+
+          const scb = newLockedSenderCallback(s.lscb, selectSemaphore.token);
 
           pendingResolve = resolve;
           pendingReject = reject;
           try {
-            if (s.send.addSender(s.scb)) {
-              // added, all we can do is wait for the callback (after marking it as added)
-              s.hscb = true;
+            if (s.send.addSender(scb)) {
+              // added, all we can do is wait for the callback
+              s.cscb = scb;
               return;
-            }
-
-            // sanity check - scb should have been called synchronously
-            if (pendingResolve !== undefined || pendingReject !== undefined) {
-              reject(
-                new Error(
-                  'ts-chan: select: send: addSender returned false but did not call the callback synchronously'
-                )
-              );
             }
           } catch (e) {
             pendingResolve = undefined;
             pendingReject = undefined;
             throw e;
           }
+
+          // sanity check - scb should have been called synchronously
+          if (pendingResolve !== undefined || pendingReject !== undefined) {
+            pendingResolve = undefined;
+            pendingReject = undefined;
+            throw new Error(
+              'ts-chan: select: send: channel protocol misuse: addSender returned false but did not call the callback synchronously'
+            );
+          }
         }).then(onfulfilled, onrejected);
       };
     } else if (v[selectState].recv !== undefined) {
       const s = v[selectState];
 
-      s.rcb = (val, ok) => {
-        s.hrcb = false;
+      s.lrcb = (token: SelectSemaphoreToken, val, ok) => {
+        if (token !== selectSemaphore.token) {
+          throw new Error(
+            'ts-chan: select: recv: channel protocol misuse: callback called after remove'
+          );
+        }
+
+        // always this callback (instance - bound token) or already undefined
+        s.crcb = undefined;
+
         try {
           s.next = val;
           s.ok = ok;
           // after handling the data but before resolve - in case it throws (it calls external code)
-          stop(stopTokenId);
+          stop(token);
           pendingResolve?.(i);
         } catch (e) {
           pendingReject?.(e);
@@ -518,34 +592,41 @@ const mapPendingValue = <T>(v: T, i: number) => {
 
       // kicks off recv
       s.then = (onfulfilled, onrejected) => {
-        stopTokenId = stopToken.id;
-
         return new Promise<number>((resolve, reject) => {
-          if (s.hrcb) {
-            throw new Error('ts-chan: select: recv: already added receiver');
+          if (selectSemaphore.token === undefined) {
+            throw new Error(
+              'ts-chan: select: recv: unexpected error that should never happen: stop token not set'
+            );
           }
+          if (s.crcb !== undefined) {
+            throw new Error(
+              'ts-chan: select: recv: unexpected error that should never happen: already added receiver'
+            );
+          }
+
+          const rcb = newLockedReceiverCallback(s.lrcb, selectSemaphore.token);
 
           pendingResolve = resolve;
           pendingReject = reject;
           try {
-            if (s.recv.addReceiver(s.rcb)) {
-              // added, all we can do is wait for the callback (after marking it as added)
-              s.hrcb = true;
+            if (s.recv.addReceiver(rcb)) {
+              // added, all we can do is wait for the callback
+              s.crcb = rcb;
               return;
-            }
-
-            // sanity check - rcb should have been called synchronously
-            if (pendingResolve !== undefined || pendingReject !== undefined) {
-              reject(
-                new Error(
-                  'ts-chan: select: recv: addReceiver returned false but did not call the callback synchronously'
-                )
-              );
             }
           } catch (e) {
             pendingResolve = undefined;
             pendingReject = undefined;
             throw e;
+          }
+
+          // sanity check - rcb should have been called synchronously
+          if (pendingResolve !== undefined || pendingReject !== undefined) {
+            pendingResolve = undefined;
+            pendingReject = undefined;
+            throw new Error(
+              'ts-chan: select: recv: channel protocol misuse: addReceiver returned false but did not call the callback synchronously'
+            );
           }
         }).then(onfulfilled, onrejected);
       };
@@ -566,19 +647,26 @@ const mapPendingValue = <T>(v: T, i: number) => {
     .catch(e => {
       s.ok = false;
       s.next = e;
-    })
-    .finally(() => {
-      stop(stopTokenId);
     });
-
-  const pi = thenReturnValue(prom, i);
 
   const s: CaseStatePromise<Awaited<T>> = {
     cidx: i,
     prom,
     then: (onfulfilled, onrejected) => {
-      stopTokenId = stopToken.id;
-      return pi.then(onfulfilled, onrejected);
+      if (selectSemaphore.token === undefined) {
+        return Promise.reject(
+          new Error(
+            'ts-chan: select: promise: unexpected error that should never happen: stop token not set'
+          )
+        );
+      }
+      const token = selectSemaphore.token;
+      return prom
+        .then(() => {
+          stop(token);
+          return i;
+        })
+        .then(onfulfilled, onrejected);
     },
   };
 
@@ -589,11 +677,6 @@ const isSelectCase = <T>(
   value: T
 ): value is T & (SelectCaseSender<any> | SelectCaseReceiver<any>) => {
   return typeof value === 'object' && value !== null && selectState in value;
-};
-
-const thenReturnValue = async <T>(p: Promise<unknown>, v: T) => {
-  await p;
-  return v;
 };
 
 const fisherYatesShuffle = <T extends SelectCase<any>[typeof selectState]>(
@@ -618,6 +701,6 @@ const fisherYatesShuffle = <T extends SelectCase<any>[typeof selectState]>(
 };
 
 // used as a mechanism to prevent stop from racing between calls to wait
-type StopToken = {
-  id?: object;
+type SelectSemaphore = {
+  token?: SelectSemaphoreToken;
 };

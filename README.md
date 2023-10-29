@@ -621,7 +621,7 @@ Type: SelectCases\<T>
 
 Accessing a (typed) received value:
 ```ts
-import {recv} from 'ts-chan';
+import {recv, Chan, Select} from 'ts-chan';
 
 const ch1 = new Chan<number>();
 const ch2 = new Chan<string>();
