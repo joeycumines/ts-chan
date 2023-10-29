@@ -1,0 +1,12 @@
+{
+  "name": "javascript-mixing-promises-and-channels",
+  "private": true,
+  "author": "Joseph Cumines <joeycumines@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "ts-chan": "latest"
+  },
+  "scripts": {
+    "test": "node index.js"
+  }
+}

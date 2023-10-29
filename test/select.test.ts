@@ -125,6 +125,108 @@ describe('Select', () => {
   });
 
   describe('examples', () => {
+    test('mixing promises with channels', async () => {
+      const ch = new Chan<number>(1);
+      let chCount = 0;
+      let promiseImmediateResolveCount = 0;
+      let promiseDelayedResolveCount = 0;
+      let promiseRejectCount = 0;
+
+      const timeToStop = Symbol('timeToStop');
+      const catchTimeToStop = (reason: unknown) => {
+        if (reason !== timeToStop) {
+          throw reason;
+        }
+      };
+      const abort = new AbortController();
+
+      const workers: Promise<void>[] = [
+        (async () => {
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            await ch.send(1, abort.signal);
+          }
+        })().catch(catchTimeToStop),
+      ];
+
+      const immediateResolvedPromise = Promise.resolve('immediate');
+      const delayedResolvedPromise = new Promise<string>(resolve => {
+        setTimeout(() => {
+          resolve('delayed');
+        }, 10);
+      });
+      const rejectedPromise = Promise.reject('error');
+
+      const select = new Select([
+        recv(ch),
+        immediateResolvedPromise,
+        delayedResolvedPromise,
+        rejectedPromise,
+      ]);
+      const doIteration = async () => {
+        const result = await select.wait(abort.signal);
+        switch (result) {
+          case 0:
+            chCount++;
+            break;
+          case 1:
+            promiseImmediateResolveCount++;
+            expect(select.recv(select.cases[result])).toStrictEqual({
+              done: true,
+              value: 'immediate',
+            });
+            break;
+          case 2:
+            promiseDelayedResolveCount++;
+            expect(select.recv(select.cases[result])).toStrictEqual({
+              done: true,
+              value: 'delayed',
+            });
+            break;
+          case 3: {
+            promiseRejectCount++;
+            const c = select.cases[result];
+            try {
+              select.recv(c);
+              expect('to be unreachable').toBe('unreachable');
+            } catch (e) {
+              expect(e).toBe('error');
+            }
+            break;
+          }
+          default:
+            throw new Error('unreachable');
+        }
+      };
+
+      for (let i = 0; i < 20; i++) {
+        await doIteration();
+      }
+      expect(promiseRejectCount).toBe(1);
+      expect(promiseImmediateResolveCount).toBe(1);
+      expect(chCount).toBe(18);
+
+      workers.push(
+        (async () => {
+          // eslint-disable-next-line no-constant-condition -- stopped by abort
+          while (true) {
+            await doIteration();
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        })().catch(catchTimeToStop)
+      );
+
+      await delayedResolvedPromise;
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      expect(promiseDelayedResolveCount).toBe(1);
+      expect(chCount).toBeGreaterThan(18);
+
+      abort.abort(timeToStop);
+      await Promise.all(workers);
+    });
+
     test('documented example on Select.cases - Accessing a (typed) received value', async () => {
       const ch1Values: readonly number[] = [
         4.6, 8.2, 104.523, -451.2, 2.01, 24.88, 99,
