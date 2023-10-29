@@ -113,13 +113,13 @@ describe('Select', () => {
     expect(Math.abs(calculateDeltaPercent(chRecv1Count))).toBeLessThan(
       thresholdPercent
     );
-    expect(Math.abs(calculateDeltaPercent(chRecv1Count))).toBeLessThan(
+    expect(Math.abs(calculateDeltaPercent(chRecv2Count))).toBeLessThan(
       thresholdPercent
     );
-    expect(Math.abs(calculateDeltaPercent(chRecv1Count))).toBeLessThan(
+    expect(Math.abs(calculateDeltaPercent(chSend1Count))).toBeLessThan(
       thresholdPercent
     );
-    expect(Math.abs(calculateDeltaPercent(chRecv1Count))).toBeLessThan(
+    expect(Math.abs(calculateDeltaPercent(chSend2Count))).toBeLessThan(
       thresholdPercent
     );
   });
