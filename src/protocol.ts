@@ -16,6 +16,9 @@ export type Receiver<T> = {
   addReceiver: (callback: ReceiverCallback<T>) => boolean;
   /**
    * Immediately removes the receiver from the receiver list, if it is there.
+   *
+   * To facilitate "attempting synchronous receive", this method MUST only
+   * remove the _last_ matching occurrence of the callback, if it exists.
    */
   removeReceiver: (callback: ReceiverCallback<T>) => void;
 };
@@ -66,6 +69,9 @@ export type Sender<T> = {
   addSender: (callback: SenderCallback<T>) => boolean;
   /**
    * Immediately removes the sender from the sender list, if it is there.
+   *
+   * To facilitate "attempting synchronous send", this method MUST only
+   * remove the _last_ matching occurrence of the callback, if it exists.
    */
   removeSender: (callback: SenderCallback<T>) => void;
   /**

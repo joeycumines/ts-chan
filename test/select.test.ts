@@ -56,17 +56,11 @@ describe('Select', () => {
 
     const select = new Select([
       recv(chRecv1),
-      send(chSend1, (err, ok) => {
-        if (!ok) {
-          throw err;
-        }
+      send(chSend1, () => {
         return 1;
       }),
       recv(chRecv2),
-      send(chSend2, (err, ok) => {
-        if (!ok) {
-          throw err;
-        }
+      send(chSend2, () => {
         return 1;
       }),
     ]);
@@ -172,14 +166,14 @@ describe('Select', () => {
           case 1:
             promiseImmediateResolveCount++;
             expect(select.recv(select.cases[result])).toStrictEqual({
-              done: true,
+              done: false,
               value: 'immediate',
             });
             break;
           case 2:
             promiseDelayedResolveCount++;
             expect(select.recv(select.cases[result])).toStrictEqual({
-              done: true,
+              done: false,
               value: 'delayed',
             });
             break;
@@ -372,10 +366,7 @@ describe('Select', () => {
               let outputValue = 0;
               const select = new Select([
                 recv(input),
-                send(output, (err, ok) => {
-                  if (!ok) {
-                    throw err;
-                  }
+                send(output, () => {
                   return outputValue++;
                 }),
               ]);
@@ -454,7 +445,7 @@ describe('Select', () => {
       const promiseBooleanResult: IteratorResult<true, true | undefined> =
         select.recv(select.cases[2]);
       expect(promiseBooleanResult).toStrictEqual({
-        done: true,
+        done: false,
         value: true,
       });
       expect(chanNumber.trySend(1235)).toBe(true);
@@ -462,6 +453,121 @@ describe('Select', () => {
       const chanNumberResult: IteratorResult<number, number | undefined> =
         select.recv(select.cases[0]);
       expect(chanNumberResult).toStrictEqual({value: 1235});
+    });
+  });
+
+  describe('wait', () => {
+    describe('comparison to Promise.race', () => {
+      const tests = async (race: typeof Promise.race | undefined) => {
+        it('should always resolve or reject with the first settled promise', async () => {
+          // Helper function: Fisher-Yates Shuffle algorithm
+          function shuffleArray<T>(array: T[]): T[] {
+            for (let i = array.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+          }
+
+          const runs = 1000; // Number of fuzz test iterations
+
+          for (let i = 0; i < runs; i++) {
+            // 1. Decide how many promises we want to test
+            const numPromises = Math.floor(Math.random() * 10) + 1; // Between 1 and 10 inclusive
+
+            // 2. Create promises and extract their resolve/reject callbacks
+            const promises: Promise<string>[] = [];
+            const callbacksMap = new Map<
+              Promise<string>,
+              {
+                id: number;
+                resolve: (value: string) => void;
+                reject: (reason: any) => void;
+              }
+            >();
+
+            for (let j = 0; j < numPromises; j++) {
+              let resolver: (value: string) => void = () => {};
+              let rejecter: (reason: any) => void = () => {};
+              const promise = new Promise<string>((resolve, reject) => {
+                resolver = resolve;
+                rejecter = reject;
+              });
+
+              promises.push(promise);
+              callbacksMap.set(promise, {
+                id: j,
+                resolve: resolver,
+                reject: rejecter,
+              });
+            }
+
+            // 4. Call Promise.race but do not await
+            const racePromise =
+              race === undefined ? Promise.race(promises) : race(promises);
+
+            // 5. Shuffle the promises array
+            shuffleArray(promises);
+
+            // 6. Resolve some promises randomly
+            const numToResolve = Math.floor(Math.random() * numPromises) + 1; // At least 1
+            let expectedValue: unknown;
+            let expectedReject = false;
+            for (let j = 0; j < numToResolve; j++) {
+              const outcome = Math.random() < 0.5 ? 'resolve' : 'reject'; // Randomly decide the outcome
+              const {id, resolve, reject} = callbacksMap.get(promises[j])!;
+
+              if (outcome === 'resolve') {
+                const value = `Resolved: ${id}`;
+                // console.log(value);
+                if (j === 0) {
+                  expectedValue = value;
+                  expectedReject = false;
+                }
+                resolve(value);
+              } else {
+                const reason = `Rejected: ${id}`;
+                // console.log(reason);
+                if (j === 0) {
+                  expectedValue = reason;
+                  expectedReject = true;
+                }
+                reject(reason);
+              }
+
+              // console.log(
+              //   'expectedValue',
+              //   expectedValue,
+              //   'expectedReject',
+              //   expectedReject
+              // );
+
+              // 7. Test the result
+              await expect(racePromise)[
+                expectedReject ? 'rejects' : 'resolves'
+              ].toStrictEqual(expectedValue);
+            }
+          }
+        });
+      };
+      describe('baseline Promise.race', () => {
+        tests(undefined);
+      });
+      describe('Select used as Promise.race', () => {
+        tests(
+          async <T>(values: Iterable<PromiseLike<T>>): Promise<Awaited<T>> => {
+            const select = new Select(Array.from(values));
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const v = select.recv(select.cases[await select.wait()]);
+              if (v.done) {
+                throw new Error('promises should never indicate closed');
+              }
+              return v.value;
+            }
+          }
+        );
+      });
     });
   });
 });

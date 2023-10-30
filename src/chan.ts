@@ -322,42 +322,42 @@ export class Chan<T>
         }
       }
       this.#recvs.length = 0;
-    }
-
-    if (this.#buffer !== undefined) {
-      while (!this.#buffer.full && this.#sends.length !== 0) {
-        const callback = this.#sends.shift()!;
-        let value: T;
-        try {
-          value = callback(undefined, true);
-        } catch (e) {
-          lastError =
-            e ??
-            lastError ??
-            new Error('ts-chan: chan: send: error closing channel');
-          continue;
-        }
-        this.#buffer.push(value);
-      }
-    }
-
-    if (this.#sends.length !== 0) {
-      const err = new SendOnClosedChannelError();
-      for (let i = 0; i < this.#sends.length; i++) {
-        const callback = this.#sends[i];
-        this.#sends[i] = undefined!;
-        try {
-          callback(err, false);
-        } catch (e: unknown) {
-          if (e !== err) {
+    } else {
+      if (this.#buffer !== undefined) {
+        while (!this.#buffer.full && this.#sends.length !== 0) {
+          const callback = this.#sends.shift()!;
+          let value: T;
+          try {
+            value = callback(undefined, true);
+          } catch (e) {
             lastError =
               e ??
               lastError ??
               new Error('ts-chan: chan: send: error closing channel');
+            continue;
           }
+          this.#buffer.push(value);
         }
       }
-      this.#sends.length = 0;
+
+      if (this.#sends.length !== 0) {
+        const err = new SendOnClosedChannelError();
+        for (let i = 0; i < this.#sends.length; i++) {
+          const callback = this.#sends[i];
+          this.#sends[i] = undefined!;
+          try {
+            callback(err, false);
+          } catch (e: unknown) {
+            if (e !== err) {
+              lastError =
+                e ??
+                lastError ??
+                new Error('ts-chan: chan: send: error closing channel');
+            }
+          }
+        }
+        this.#sends.length = 0;
+      }
     }
 
     if (lastError !== undefined) {

@@ -1,16 +1,19 @@
 import {
   selectState,
   type SelectCase,
-  type SelectCaseSender,
-  type SelectCaseReceiver,
   type CaseStatePromise,
   newLockedSenderCallback,
   type SelectSemaphoreToken,
   newLockedReceiverCallback,
+  type SelectCasePromise,
 } from './case';
 import {random as mathRandom} from './math';
 
-export type SelectCases<T extends readonly unknown[] | []> = {
+export type SelectCaseInputs =
+  | readonly (SelectCase<any> | PromiseLike<any>)[]
+  | [];
+
+export type SelectCases<T extends SelectCaseInputs> = {
   readonly [P in keyof T]: SelectCase<UnwrapSelectCase<T[P]>>;
 } & {
   readonly length: number;
@@ -18,12 +21,14 @@ export type SelectCases<T extends readonly unknown[] | []> = {
 
 export type UnwrapSelectCase<T> = T extends SelectCase<infer U>
   ? U
-  : Awaited<T>;
+  : T extends PromiseLike<any>
+  ? Awaited<T>
+  : never;
 
 /**
  * Select implements the functionality of Go's select statement, with support
- * for support cases comprised of {@link Sender}, {@link Receiver}, or values
- * (resolved as promises), which are treated as a single-value never-closed
+ * for support cases comprised of {@link Sender}, {@link Receiver}, or
+ * {@link PromiseLike}, which are treated as a single-value never-closed
  * channel.
  *
  * @param {Array<SelectCase|Promise|*>} cases The cases to select from, which
@@ -33,7 +38,7 @@ export type UnwrapSelectCase<T> = T extends SelectCase<infer U>
  * @template T Array of cases to select from, providing type support for
  *   received values. See also {@link cases} and {@link recv}.
  */
-export class Select<T extends readonly unknown[] | []> {
+export class Select<T extends SelectCaseInputs> {
   // Input cases, after converting any non-cases to the promise variant.
   // Returned via the cases property, which is used to provide per-element
   // types.
@@ -60,6 +65,8 @@ export class Select<T extends readonly unknown[] | []> {
   // Used to ensure we don't buffer multiple received values.
   #next?: number;
 
+  // Used to guard against misuse of callbacks, and to ensure that stop is
+  // only called once per wait.
   #semaphore: SelectSemaphore;
 
   constructor(cases: T) {
@@ -271,6 +278,9 @@ export class Select<T extends readonly unknown[] | []> {
       this.#semaphore.token = token;
 
       try {
+        // WARNING: This implementation relies on all then functions being
+        // called prior to allowing further calls to any of the methods.
+        // (Due to the mechanism used to pass down the semaphore token.)
         let promise = Promise.race(this.#pending);
         if (rejectOnAbort !== undefined) {
           this.#buf2elem ??= [undefined, undefined];
@@ -361,7 +371,7 @@ export class Select<T extends readonly unknown[] | []> {
             // resolved
             result = {
               value: v[selectState].next,
-              done: true,
+              done: false,
             };
             break;
           case false:
@@ -444,7 +454,7 @@ let stopForMapPendingValue: ((id: SelectSemaphoreToken) => void) | undefined;
 let selectSemaphoreForMapPendingValue: SelectSemaphore | undefined;
 
 // Converts any non-cases to the promise variant, returns a new array.
-const mapPendingValues = <T extends readonly unknown[] | []>(
+const mapPendingValues = <T extends SelectCaseInputs>(
   cases: T,
   stop: Exclude<typeof stopForMapPendingValue, undefined>,
   selectSemaphore: Exclude<typeof selectSemaphoreForMapPendingValue, undefined>
@@ -509,7 +519,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
 
         try {
           stop(token);
-          const result = s.oscb(undefined, true);
+          const result = s.expr();
           s.ok = true;
           pendingResolve?.(i);
           return result;
@@ -526,9 +536,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
       s.then = (onfulfilled, onrejected) => {
         return new Promise<number>((resolve, reject) => {
           if (selectSemaphore.token === undefined) {
-            throw new Error(
-              'ts-chan: select: send: unexpected error that should never happen: stop token not set'
-            );
+            throw errThenCalledAfterStop;
           }
           if (s.cscb !== undefined) {
             throw new Error(
@@ -594,9 +602,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
       s.then = (onfulfilled, onrejected) => {
         return new Promise<number>((resolve, reject) => {
           if (selectSemaphore.token === undefined) {
-            throw new Error(
-              'ts-chan: select: recv: unexpected error that should never happen: stop token not set'
-            );
+            throw errThenCalledAfterStop;
           }
           if (s.crcb !== undefined) {
             throw new Error(
@@ -654,11 +660,7 @@ const mapPendingValue = <T>(v: T, i: number) => {
     prom,
     then: (onfulfilled, onrejected) => {
       if (selectSemaphore.token === undefined) {
-        return Promise.reject(
-          new Error(
-            'ts-chan: select: promise: unexpected error that should never happen: stop token not set'
-          )
-        );
+        return Promise.reject(errThenCalledAfterStop);
       }
       const token = selectSemaphore.token;
       return prom
@@ -670,12 +672,15 @@ const mapPendingValue = <T>(v: T, i: number) => {
     },
   };
 
-  return {[selectState]: s};
+  const c: SelectCasePromise<Awaited<typeof v>> = {
+    type: 'Promise',
+    [selectState]: s,
+  };
+
+  return c;
 };
 
-const isSelectCase = <T>(
-  value: T
-): value is T & (SelectCaseSender<any> | SelectCaseReceiver<any>) => {
+const isSelectCase = <T>(value: T): value is T & SelectCase<any> => {
   return typeof value === 'object' && value !== null && selectState in value;
 };
 
@@ -704,3 +709,6 @@ const fisherYatesShuffle = <T extends SelectCase<any>[typeof selectState]>(
 type SelectSemaphore = {
   token?: SelectSemaphoreToken;
 };
+
+const errThenCalledAfterStop =
+  'ts-chan: select: normal internal error that should never bubble: then called after stop';

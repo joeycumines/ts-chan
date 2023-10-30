@@ -23,23 +23,46 @@ export type SelectCase<T> =
   | SelectCaseReceiver<T>
   | SelectCasePromise<T>;
 
+/**
+ * Sender select case.
+ * See also {@link .send}.
+ */
 export type SelectCaseSender<T> = {
-  [selectState]: CaseStateSender<T>;
+  /**
+   * Type is provided to support type guards, and reflection-style logic.
+   */
+  readonly type: 'Sender';
+  readonly [selectState]: CaseStateSender<T>;
 };
 
+/**
+ * Receiver select case.
+ * See also {@link .recv}.
+ */
 export type SelectCaseReceiver<T> = {
-  [selectState]: CaseStateReceiver<T>;
+  /**
+   * Type is provided to support type guards, and reflection-style logic.
+   */
+  readonly type: 'Receiver';
+  readonly [selectState]: CaseStateReceiver<T>;
 };
 
+/**
+ * Promise (or PromiseLike) select case.
+ */
 export type SelectCasePromise<T> = {
-  [selectState]: CaseStatePromise<T>;
+  /**
+   * Type is provided to support type guards, and reflection-style logic.
+   */
+  readonly type: 'Promise';
+  readonly [selectState]: CaseStatePromise<T>;
 };
 
 export type CaseStateSender<T> = CaseStateCommon & {
   // where to send values
   send: Sender<T>;
-  // original send callback, provided by {@link .send}
-  oscb: SenderCallback<T>;
+  // send callback expression, provided by {@link .send}
+  expr: () => T;
   // used to get a new "locked" send callback, see {@link .newLockedSenderCallback}
   lscb: (
     token: SelectSemaphoreToken,
@@ -77,7 +100,7 @@ export type CaseStateReceiver<T> = CaseStateCommon & {
   crcb?: ReceiverCallback<T>;
 
   send?: undefined;
-  oscb?: undefined;
+  expr?: undefined;
   lscb?: undefined;
   cscb?: undefined;
 
@@ -105,7 +128,7 @@ export type CaseStatePromise<T> = CaseStateCommon & {
 
   send?: undefined;
   lscb?: undefined;
-  oscb?: undefined;
+  expr?: undefined;
   cscb?: undefined;
 
   recv?: undefined;
@@ -143,8 +166,8 @@ export type CaseStateCommon = PromiseLike<number> & {
  */
 export const recv = <T>(
   from: Receivable<T> | Receiver<T>
-): SelectCaseReceiver<T> => ({
-  [selectState]: {
+): SelectCaseReceiver<T> =>
+  newSelectCase('Receiver', {
     recv:
       getReceiver in from && from[getReceiver]
         ? from[getReceiver]()
@@ -155,31 +178,54 @@ export const recv = <T>(
     cidx: undefined as any,
     lrcb: undefined as any,
     then: undefined as any,
-  },
-});
+  });
 
 /**
  * Prepares a {@link SelectCaseSender} case, to be used in a {@link Select}.
  *
  * WARNING: Cases may only be used in a single select instance, though select
  * instances are intended to be reused, e.g. when implementing control loops.
+ *
+ * @param to Target Sendable or Sender.
+ * @param expr Expression to evaluate when sending. WARNING: Unlike Go, this
+ *   is only evaluated when the case is selected, and only for the selected
+ *   case. See the project README for more details.
  */
 export const send = <T>(
   to: Sendable<T> | Sender<T>,
-  scb: SenderCallback<T>
-): SelectCaseSender<T> => ({
-  [selectState]: {
+  expr: () => T
+): SelectCaseSender<T> =>
+  newSelectCase('Sender', {
     send:
       getSender in to && to[getSender] ? to[getSender]() : (to as Sender<T>),
-    oscb: scb,
+    expr,
 
     // set later
 
     cidx: undefined as any,
     lscb: undefined as any,
     then: undefined as any,
-  },
-});
+  });
+
+const newSelectCase = <R extends SelectCase<V>, T extends R['type'], V>(
+  type: T,
+  state: SelectCase<V>[typeof selectState]
+): R => {
+  const c: Omit<SelectCase<V>, typeof selectState | 'type'> = {};
+  Object.defineProperty(c, 'type', {
+    value: type,
+    enumerable: true,
+    writable: false,
+    configurable: false,
+  });
+  Object.defineProperty(c, selectState, {
+    value: state,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return c as R;
+};
 
 export type SelectSemaphoreToken = {
   readonly stop?: boolean;

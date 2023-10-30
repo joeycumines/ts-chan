@@ -91,17 +91,20 @@ also supported, though they have no analogue, in Go.
     channel) *is* a supported part of the channel protocol, it's not required,
     and has no (type-based) mechanism to describe whether the channel supports
     it, or not.
-
-##### Different, for now
-
-1.  **Case Evaluation Order**: It's quite possible that some or all of the case
-    evaluation semantics will be adopted, as an optional feature. The current
-    implementation has the [SenderCallback](#sendercallback) acting as both
-    the mechanism to evaluate expressions (for each value to send), and the
-    mechanism to handle the outcome of the send operation (sends may fail with
-    an error, i.e. if the channel is closed). Go's behavior can be simulated
-    (using the current protocol and implementations), but it requires additional
-    bits.
+4.  **Case Evaluation Order**: This is an interesting topic, and I found that
+    Go's behavior was not exactly what I expected. I may add similar send value
+    evaluation as an optional feature, at some later date.
+    For reference, from
+    the [Go spec](https://go.dev/ref/spec#Select_statements):
+    > For all the cases in the statement, the channel operands of receive
+    > operations and the channel and right-hand-side expressions of send
+    > statements are evaluated exactly once, in source order, upon entering the
+    > "select" statement. The result is a set of channels to receive from or
+    > send to, and the corresponding values to send. Any side effects in that
+    > evaluation will occur irrespective of which (if any) communication
+    > operation is selected to proceed. Expressions on the left-hand side of a
+    > RecvStmt with a short variable declaration or assignment are not yet
+    > evaluated.
 
 ## API
 
@@ -158,6 +161,15 @@ also supported, though they have no analogue, in Go.
 *   [CloseOfClosedChannelError](#closeofclosedchannelerror)
     *   [Parameters](#parameters-9)
 *   [SelectCase](#selectcase)
+*   [SelectCaseSender](#selectcasesender)
+    *   [Properties](#properties-4)
+    *   [type](#type)
+*   [SelectCaseReceiver](#selectcasereceiver)
+    *   [Properties](#properties-5)
+    *   [type](#type-1)
+*   [SelectCasePromise](#selectcasepromise)
+    *   [Properties](#properties-6)
+    *   [type](#type-2)
 *   [recv](#recv-1)
     *   [Parameters](#parameters-10)
 *   [send](#send-1)
@@ -400,6 +412,9 @@ Type: function (callback: [ReceiverCallback](#receivercallback)\<T>): [boolean](
 
 Immediately removes the receiver from the receiver list, if it is there.
 
+To facilitate "attempting synchronous receive", this method MUST only
+remove the *last* matching occurrence of the callback, if it exists.
+
 Type: function (callback: [ReceiverCallback](#receivercallback)\<T>): void
 
 ### ReceiverCallback
@@ -460,6 +475,9 @@ Type: function (callback: [SenderCallback](#sendercallback)\<T>): [boolean](http
 #### removeSender
 
 Immediately removes the sender from the sender list, if it is there.
+
+To facilitate "attempting synchronous send", this method MUST only
+remove the *last* matching occurrence of the callback, if it exists.
 
 Type: function (callback: [SenderCallback](#sendercallback)\<T>): void
 
@@ -565,11 +583,64 @@ WARNING: The selectState symbol is deliberately not exported, as the
 value of `SelectCase[selectState]` is not part of the API contract, and
 is simply a mechanism to support typing.
 
-Type: (SelectCaseSender\<T> | SelectCaseReceiver\<T> | SelectCasePromise\<T>)
+Type: ([SelectCaseSender](#selectcasesender)\<T> | [SelectCaseReceiver](#selectcasereceiver)\<T> | [SelectCasePromise](#selectcasepromise)\<T>)
+
+### SelectCaseSender
+
+Sender select case.
+See also [.send](.send).
+
+Type: {type: `"Sender"`, selectState: CaseStateSender\<T>}
+
+#### Properties
+
+*   `type` **`"Sender"`**&#x20;
+*   `selectState` **CaseStateSender\<T>**&#x20;
+
+#### type
+
+Type is provided to support type guards, and reflection-style logic.
+
+Type: `"Sender"`
+
+### SelectCaseReceiver
+
+Receiver select case.
+See also [.recv](.recv).
+
+Type: {type: `"Receiver"`, selectState: CaseStateReceiver\<T>}
+
+#### Properties
+
+*   `type` **`"Receiver"`**&#x20;
+*   `selectState` **CaseStateReceiver\<T>**&#x20;
+
+#### type
+
+Type is provided to support type guards, and reflection-style logic.
+
+Type: `"Receiver"`
+
+### SelectCasePromise
+
+Promise (or PromiseLike) select case.
+
+Type: {type: `"Promise"`, selectState: CaseStatePromise\<T>}
+
+#### Properties
+
+*   `type` **`"Promise"`**&#x20;
+*   `selectState` **CaseStatePromise\<T>**&#x20;
+
+#### type
+
+Type is provided to support type guards, and reflection-style logic.
+
+Type: `"Promise"`
 
 ### recv
 
-Prepares a [SelectCaseReceiver](SelectCaseReceiver) case, to be used in a [Select](#select).
+Prepares a [SelectCaseReceiver](#selectcasereceiver) case, to be used in a [Select](#select).
 
 WARNING: Cases may only be used in a single select instance, though select
 instances are intended to be reused, e.g. when implementing control loops.
@@ -578,27 +649,29 @@ instances are intended to be reused, e.g. when implementing control loops.
 
 *   `from` **([Receivable](#receivable)\<T> | [Receiver](#receiver)\<T>)**&#x20;
 
-Returns **SelectCaseReceiver\<T>**&#x20;
+Returns **[SelectCaseReceiver](#selectcasereceiver)\<T>**&#x20;
 
 ### send
 
-Prepares a [SelectCaseSender](SelectCaseSender) case, to be used in a [Select](#select).
+Prepares a [SelectCaseSender](#selectcasesender) case, to be used in a [Select](#select).
 
 WARNING: Cases may only be used in a single select instance, though select
 instances are intended to be reused, e.g. when implementing control loops.
 
 #### Parameters
 
-*   `to` **([Sendable](#sendable)\<T> | [Sender](#sender)\<T>)**&#x20;
-*   `scb` **[SenderCallback](#sendercallback)\<T>**&#x20;
+*   `to` **([Sendable](#sendable)\<T> | [Sender](#sender)\<T>)** Target Sendable or Sender.
+*   `expr` **function (): T** Expression to evaluate when sending. WARNING: Unlike Go, this
+    is only evaluated when the case is selected, and only for the selected
+    case. See the project README for more details.
 
-Returns **SelectCaseSender\<T>**&#x20;
+Returns **[SelectCaseSender](#selectcasesender)\<T>**&#x20;
 
 ### Select
 
 Select implements the functionality of Go's select statement, with support
-for support cases comprised of [Sender](#sender), [Receiver](#receiver), or values
-(resolved as promises), which are treated as a single-value never-closed
+for support cases comprised of [Sender](#sender), [Receiver](#receiver), or
+[PromiseLike](PromiseLike), which are treated as a single-value never-closed
 channel.
 
 #### Parameters
