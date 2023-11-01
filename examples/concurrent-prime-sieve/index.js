@@ -27,10 +27,6 @@ async function sieve(n) {
   generate(ch);
 
   for (let i = 0; i < n; i++) {
-    if (i !== 0) {
-      await new Promise(resolve => setImmediate(resolve));
-    }
-
     const prime = (await ch.recv()).value;
     primes.push(prime);
 
