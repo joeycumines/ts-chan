@@ -1,0 +1,8 @@
+{
+  "name": "concurrent-prime-sieve",
+  "private": true,
+  "dependencies": {
+    "benchmark": "^2.1.4",
+    "ts-chan": "latest"
+  }
+}

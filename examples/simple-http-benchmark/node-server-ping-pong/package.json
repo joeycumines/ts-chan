@@ -1,0 +1,7 @@
+{
+  "name": "node-server-ping-pong",
+  "private": true,
+  "dependencies": {
+    "ts-chan": "latest"
+  }
+}
