@@ -93,7 +93,6 @@ void (async function main() {
       // eslint-disable-next-line no-constant-condition
       while (true) {
         await doIteration();
-        await new Promise(resolve => setTimeout(resolve, 0));
       }
     })().catch(catchTimeToStop)
   );
