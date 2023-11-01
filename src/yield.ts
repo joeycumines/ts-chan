@@ -3,6 +3,9 @@ import {setImmediatePolyfill} from './setImmediatePolyfill';
 /**
  * Returns the current yield generation. This value is incremented on each
  * {@link yieldToMacrotaskQueue}, which is a self-conflating operation.
+ *
+ * See [The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+ * project README, for details on the purpose of this mechanism.
  */
 export const getYieldGeneration = (): number => yieldGeneration;
 
@@ -15,6 +18,9 @@ export const getYieldGeneration = (): number => yieldGeneration;
  * Calls to this function are self-conflating, meaning that if this function is
  * called multiple times before the next iteration of the event loop, the same
  * promise will be returned.
+ *
+ * See [The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+ * project README, for details on the purpose of this mechanism.
  */
 export const yieldToMacrotaskQueue = (): Promise<number> => {
   if (yieldPromise === undefined) {

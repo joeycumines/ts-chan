@@ -18,6 +18,52 @@ I'll be iterating on this for a few weeks, in my spare time, with the goal of
 a production-ready module, which can be used any JS environment, including
 browsers.
 
+## Usage
+
+### Installation
+
+    npm install --save ts-chan
+
+### The microtask queue: a footgun
+
+This module takes steps to mitigate the risk of microtask cycles. They remain,
+however, a real concern for any JavaScript program, that involves communication
+between concurrent operations. Somewhat more insidious than plain call cycles,
+as they are not visible in the call stack, it's important to know that promises
+and async/await operate on the microtask queue, unless they wait on something
+that operates on the macrotask queue (e.g. i.o., timers).
+
+While `queueMicrotask` is not used by this module, MDN's
+[Using microtasks in JavaScript with queueMicrotask()](https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide)
+guide is both informative and relevant.
+
+The mitigation strategy used by this module is for high-level async methods
+(including [Chan.send](#send), [Chan.recv](#recv), and [Select.wait](#wait))
+to use [getYieldGeneration](#getyieldgeneration) and
+[yieldToMacrotaskQueue](#yieldtomacrotaskqueue) like:
+
+```ts
+async exampleHighLevelAsyncMethod() {
+  // ...
+  const yieldGeneration = getYieldGeneration();
+  const yieldPromise = yieldToMacrotaskQueue();
+  try {
+    // ...
+    return await result;
+  } finally {
+    if (getYieldGeneration() === yieldGeneration) {
+      await yieldPromise;
+    }
+  }
+}
+```
+
+The above is a simple (albeit unoptimised) pattern which ensures that, so long
+as one side calls one of these methods, the event loop will not block.
+This solution does have
+[some performance impact](https://github.com/joeycumines/ts-chan/compare/66f30b78445636770d494629dbfb7c7a54132599...b03ab84947900f2b1a66f7802ec2ac56e26e1145),
+and does not completely mitigate the risk, but seems a reasonable compromise.
+
 ## Architecture
 
 ### Protocol
@@ -770,6 +816,9 @@ Returns **IteratorResult\<T, (T | [undefined](https://developer.mozilla.org/docs
 Returns the current yield generation. This value is incremented on each
 [yieldToMacrotaskQueue](#yieldtomacrotaskqueue), which is a self-conflating operation.
 
+See [The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+project README, for details on the purpose of this mechanism.
+
 Returns **[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)**&#x20;
 
 ### yieldToMacrotaskQueue
@@ -782,5 +831,8 @@ microtask queue represents.
 Calls to this function are self-conflating, meaning that if this function is
 called multiple times before the next iteration of the event loop, the same
 promise will be returned.
+
+See [The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+project README, for details on the purpose of this mechanism.
 
 Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)<[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)>**&#x20;
