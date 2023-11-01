@@ -1,6 +1,6 @@
 {
   "name": "ts-chan",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Concurrency primitives for TypeScript and JavaScript.",
   "repository": "joeycumines/ts-chan",
   "keywords": [
