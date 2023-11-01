@@ -205,7 +205,6 @@ describe('Select', () => {
           // eslint-disable-next-line no-constant-condition -- stopped by abort
           while (true) {
             await doIteration();
-            await new Promise(resolve => setTimeout(resolve, 0));
           }
         })().catch(catchTimeToStop)
       );

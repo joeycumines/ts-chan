@@ -28,3 +28,5 @@ export {
   type UnwrapSelectCase,
   Select,
 } from './select';
+
+export {getYieldGeneration, yieldToMacrotaskQueue} from './yield';

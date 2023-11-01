@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Test</title>
+  <script src="../../build/ts-chan.umd.js"></script>
+</head>
+<body>
+<div id="content"></div>
+<script>
+  window.addEventListener("load", async function () {
+    try {
+      await window.tsChan.yieldToMacrotaskQueue();
+      document.getElementById("content").innerHTML = "Test success!";
+    } catch (e) {
+      console.error(e);
+      document.getElementById("content").innerHTML = "Error: " + e.message;
+    }
+  });
+</script>
+</body>
+</html>

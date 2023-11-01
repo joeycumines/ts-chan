@@ -183,6 +183,8 @@ also supported, though they have no analogue, in Go.
         *   [Parameters](#parameters-13)
     *   [recv](#recv-2)
         *   [Parameters](#parameters-14)
+*   [getYieldGeneration](#getyieldgeneration)
+*   [yieldToMacrotaskQueue](#yieldtomacrotaskqueue)
 
 ### Chan
 
@@ -762,3 +764,23 @@ Consume the result of a ready case.
 *   `v` **[SelectCase](#selectcase)\<T>**&#x20;
 
 Returns **IteratorResult\<T, (T | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))>**&#x20;
+
+### getYieldGeneration
+
+Returns the current yield generation. This value is incremented on each
+[yieldToMacrotaskQueue](#yieldtomacrotaskqueue), which is a self-conflating operation.
+
+Returns **[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)**&#x20;
+
+### yieldToMacrotaskQueue
+
+Returns a promise which will resolve on the next iteration of the event
+loop. Intended to be used in concert with [getYieldGeneration](#getyieldgeneration), this
+mechanism allows implementers to reduce the risk of the "footgun" that the
+microtask queue represents.
+
+Calls to this function are self-conflating, meaning that if this function is
+called multiple times before the next iteration of the event loop, the same
+promise will be returned.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)<[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)>**&#x20;

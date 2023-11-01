@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Test Web Worker</title>
+</head>
+<body>
+<div id="content"></div>
+<script>
+  const worker = new Worker('worker.js');
+  window.addEventListener("load", function () {
+    worker.postMessage({command: 'start'});
+  });
+  worker.onmessage = function (e) {
+    if (e.data.status === 'success') {
+      document.getElementById("content").innerHTML = "Test success!";
+    } else if (e.data.status === 'error' || e.data.status === 'uncaughtError') {
+      console.error(e.data.message);
+      document.getElementById("content").innerHTML = "Error: " + e.data.message;
+    }
+  };
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import {
   CloseOfClosedChannelError,
 } from './protocol';
 import {CircularBuffer} from './buffer';
+import {getYieldGeneration, yieldToMacrotaskQueue} from './yield';
 
 /**
  * Provides a communication mechanism between two or more concurrent
@@ -111,13 +112,17 @@ export class Chan<T>
    * Sends a value to the channel, returning a promise that resolves when it
    * has been received, and rejects on error, or on abort signal.
    */
-  send(value: T, abort?: AbortSignal): Promise<void> {
+  async send(value: T, abort?: AbortSignal): Promise<void> {
+    abort?.throwIfAborted();
+
+    const yieldGeneration = getYieldGeneration();
+    const yieldPromise = yieldToMacrotaskQueue();
     try {
-      abort?.throwIfAborted();
       if (this.trySend(value)) {
-        return Promise.resolve();
+        return;
       }
-      return new Promise<void>((resolve, reject) => {
+
+      return await new Promise<void>((resolve, reject) => {
         let listener: (() => void) | undefined;
         const callback: SenderCallback<T> = (err: unknown, ok: boolean) => {
           if (abort !== undefined) {
@@ -152,8 +157,10 @@ export class Chan<T>
         }
         this.#sends.push(callback);
       });
-    } catch (e: unknown) {
-      return Promise.reject(e);
+    } finally {
+      if (getYieldGeneration() === yieldGeneration) {
+        await yieldPromise;
+      }
     }
   }
 
@@ -187,16 +194,20 @@ export class Chan<T>
    * an iterator (the value OR indicator that the channel is closed, possibly
    * with a default value), or rejects on error, or on abort signal.
    */
-  recv(abort?: AbortSignal): Promise<IteratorResult<T, T | undefined>> {
+  async recv(abort?: AbortSignal): Promise<IteratorResult<T, T | undefined>> {
+    abort?.throwIfAborted();
+
+    const yieldGeneration = getYieldGeneration();
+    const yieldPromise = yieldToMacrotaskQueue();
     try {
-      abort?.throwIfAborted();
       {
         const result = this.tryRecv();
         if (result !== undefined) {
-          return Promise.resolve(result);
+          return result;
         }
       }
-      return new Promise((resolve, reject) => {
+
+      return await new Promise((resolve, reject) => {
         let listener: (() => void) | undefined;
         const callback: ReceiverCallback<T> = (value, ok) => {
           try {
@@ -236,8 +247,10 @@ export class Chan<T>
         }
         this.addReceiver(callback);
       });
-    } catch (e: unknown) {
-      return Promise.reject(e);
+    } finally {
+      if (getYieldGeneration() === yieldGeneration) {
+        await yieldPromise;
+      }
     }
   }
 

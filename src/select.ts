@@ -8,6 +8,7 @@ import {
   type SelectCasePromise,
 } from './case';
 import {random as mathRandom} from './math';
+import {getYieldGeneration, yieldToMacrotaskQueue} from './yield';
 
 export type SelectCaseInputs =
   | readonly (SelectCase<any> | PromiseLike<any>)[]
@@ -233,93 +234,101 @@ export class Select<T extends SelectCaseInputs> {
   async wait(abort?: AbortSignal): Promise<number> {
     abort?.throwIfAborted();
 
-    // need to call poll first - avoid accidentally buffering receives
-    // (also consumes any this.#next value)
-    {
-      const i = this.poll();
-      if (i !== undefined) {
-        return i;
-      }
-    }
-
-    this.#waiting = true;
+    const yieldGeneration = getYieldGeneration();
+    const yieldPromise = yieldToMacrotaskQueue();
     try {
-      // identifies misuse of callbacks + indicates if stop is allowed
-      // stop will consume this token, ensuring it's only performed once
-      // (the "select next communication" behavior doesn't apply to promises)
-      const token: SelectSemaphoreToken = {stop: true};
+      // need to call poll first - avoid accidentally buffering receives
+      // (also consumes any this.#next value)
+      {
+        const i = this.poll();
+        if (i !== undefined) {
+          return i;
+        }
+      }
 
-      let i: number | undefined;
-      let err: unknown;
-      let rejectOnAbort: Promise<void> | undefined;
-      let abortListener: (() => void) | undefined;
+      this.#waiting = true;
+      try {
+        // identifies misuse of callbacks + indicates if stop is allowed
+        // stop will consume this token, ensuring it's only performed once
+        // (the "select next communication" behavior doesn't apply to promises)
+        const token: SelectSemaphoreToken = {stop: true};
 
-      if (abort !== undefined) {
-        rejectOnAbort = new Promise((resolve, reject) => {
-          abortListener = () => {
-            try {
-              err ??= this.#stop(token);
-              abort!.removeEventListener('abort', abortListener!);
-              reject(abort.reason);
-            } catch (e: unknown) {
-              err ??= e;
-              reject(e);
-            }
-          };
-        });
-        if (abortListener === undefined) {
+        let i: number | undefined;
+        let err: unknown;
+        let rejectOnAbort: Promise<void> | undefined;
+        let abortListener: (() => void) | undefined;
+
+        if (abort !== undefined) {
+          rejectOnAbort = new Promise((resolve, reject) => {
+            abortListener = () => {
+              try {
+                err ??= this.#stop(token);
+                abort!.removeEventListener('abort', abortListener!);
+                reject(abort.reason);
+              } catch (e: unknown) {
+                err ??= e;
+                reject(e);
+              }
+            };
+          });
+          if (abortListener === undefined) {
+            throw new Error(
+              'ts-chan: select: next: promise executor not called synchronously'
+            );
+          }
+          abort.addEventListener('abort', abortListener);
+        }
+
+        this.#semaphore.token = token;
+
+        try {
+          // WARNING: This implementation relies on all then functions being
+          // called prior to allowing further calls to any of the methods.
+          // (Due to the mechanism used to pass down the semaphore token.)
+          let promise = Promise.race(this.#pending);
+          if (rejectOnAbort !== undefined) {
+            this.#buf2elem ??= [undefined, undefined];
+            this.#buf2elem[0] = promise;
+            this.#buf2elem[1] = rejectOnAbort;
+            promise = Promise.race(this.#buf2elem);
+          }
+
+          i = await promise;
+        } finally {
+          if (this.#buf2elem !== undefined) {
+            this.#buf2elem[0] = undefined;
+            this.#buf2elem[1] = undefined;
+          }
+          err ??= this.#stop(token);
+          abort?.removeEventListener('abort', abortListener!);
+        }
+
+        if (err !== undefined) {
+          throw err;
+        }
+
+        if (
+          !Number.isSafeInteger(i) ||
+          i < 0 ||
+          i >= this.#cases.length ||
+          this.#cases[i][selectState].pidx === undefined ||
+          this.#pending[this.#cases[i][selectState].pidx!] !==
+            this.#cases[i][selectState]
+        ) {
           throw new Error(
-            'ts-chan: select: next: promise executor not called synchronously'
+            `ts-chan: select: unexpected error that should never happen: invalid index: ${i}`
           );
         }
-        abort.addEventListener('abort', abortListener);
-      }
 
-      this.#semaphore.token = token;
-
-      try {
-        // WARNING: This implementation relies on all then functions being
-        // called prior to allowing further calls to any of the methods.
-        // (Due to the mechanism used to pass down the semaphore token.)
-        let promise = Promise.race(this.#pending);
-        if (rejectOnAbort !== undefined) {
-          this.#buf2elem ??= [undefined, undefined];
-          this.#buf2elem[0] = promise;
-          this.#buf2elem[1] = rejectOnAbort;
-          promise = Promise.race(this.#buf2elem);
-        }
-
-        i = await promise;
+        this.#next = i;
+        return i;
       } finally {
-        if (this.#buf2elem !== undefined) {
-          this.#buf2elem[0] = undefined;
-          this.#buf2elem[1] = undefined;
-        }
-        err ??= this.#stop(token);
-        abort?.removeEventListener('abort', abortListener!);
+        this.#waiting = false;
       }
-
-      if (err !== undefined) {
-        throw err;
-      }
-
-      if (
-        !Number.isSafeInteger(i) ||
-        i < 0 ||
-        i >= this.#cases.length ||
-        this.#cases[i][selectState].pidx === undefined ||
-        this.#pending[this.#cases[i][selectState].pidx!] !==
-          this.#cases[i][selectState]
-      ) {
-        throw new Error(
-          `ts-chan: select: unexpected error that should never happen: invalid index: ${i}`
-        );
-      }
-
-      this.#next = i;
-      return i;
     } finally {
-      this.#waiting = false;
+      if (getYieldGeneration() === yieldGeneration) {
+        await yieldPromise;
+      }
     }
   }
 
