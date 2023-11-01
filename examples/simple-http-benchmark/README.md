@@ -98,54 +98,54 @@ Document Path:          /
 Document Length:        1048576 bytes
 
 Concurrency Level:      100
-Time taken for tests:   1.989 seconds
+Time taken for tests:   2.017 seconds
 Complete requests:      10000
 Failed requests:        0
 Total transferred:      10486770000 bytes
 HTML transferred:       10485760000 bytes
-Requests per second:    5026.80 [#/sec] (mean)
-Time per request:       19.893 [ms] (mean)
-Time per request:       0.199 [ms] (mean, across all concurrent requests)
-Transfer rate:          5147941.99 [Kbytes/sec] received
+Requests per second:    4957.38 [#/sec] (mean)
+Time per request:       20.172 [ms] (mean)
+Time per request:       0.202 [ms] (mean, across all concurrent requests)
+Transfer rate:          5076842.47 [Kbytes/sec] received
 
 Connection Times (ms)
               min  mean[+/-sd] median   max
-Connect:        0    0   0.4      0       8
-Processing:     8   19   2.5     19      45
-Waiting:        0    0   1.3      0      20
-Total:          9   20   2.8     19      48
+Connect:        0    0   0.6      0      10
+Processing:     8   20   3.1     19      54
+Waiting:        0    1   2.8      0      33
+Total:          9   20   3.4     20      58
 
 Percentage of the requests served within a certain time (ms)
-  50%     19
+  50%     20
   66%     20
   75%     20
   80%     20
   90%     21
-  95%     21
+  95%     22
   98%     27
   99%     33
- 100%     48 (longest request)
+ 100%     58 (longest request)
 ```
 
 ```
-        5.01 real         0.57 user         0.89 sys
-            90013696  maximum resident set size
+        5.02 real         0.63 user         0.93 sys
+            94601216  maximum resident set size
                    0  average shared memory size
                    0  average unshared data size
                    0  average unshared stack size
-                7512  page reclaims
-                   2  page faults
+                7917  page reclaims
+                   5  page faults
                    0  swaps
                    0  block input operations
                    0  block output operations
-               77586  messages sent
+               76668  messages sent
                10000  messages received
                    3  signals received
-                   5  voluntary context switches
-               39844  involuntary context switches
-            11255926  instructions retired
-             5705497  cycles elapsed
-             1278720  peak memory footprint
+                   3  voluntary context switches
+               41528  involuntary context switches
+            12676040  instructions retired
+             6148728  cycles elapsed
+             1180416  peak memory footprint
 ```
 
 ### [go-server-baseline](go-server-baseline)
