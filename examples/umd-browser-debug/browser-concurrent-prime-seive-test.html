@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Test</title>
+  <script src="../../build/ts-chan.umd.js"></script>
+</head>
+<body>
+<div id="content"></div>
+<script>
+  window.addEventListener("load", async function () {
+    const interval = 100;
+    let last = Date.now();
+    const h = setInterval(() => {
+      const now = Date.now();
+      console.log('no event loop blocking', (now - last) - interval);
+      last = now;
+    }, interval);
+    try {
+      // Assuming ts-chan.umd.js exposes Chan as a global
+      const {Chan} = window.tsChan;
+
+      async function generate(abort, ch) {
+        try {
+          let i = 2;
+          while (true) { // Should ideally have a condition to not block the browser
+            await ch.send(i++, abort);
+          }
+        } finally {
+          ch.close();
+        }
+      }
+
+      async function filter(abort, src, dst, prime) {
+        for await (const i of src) {
+          if (i % prime !== 0) {
+            await dst.send(i, abort);
+          }
+        }
+      }
+
+      async function sieve(n) {
+        const abort = new AbortController();
+        try {
+          const promises = [];
+          promises.push((async () => {
+            const primes = [];
+            let ch = new Chan();
+
+            promises.push(generate(abort.signal, ch));
+
+            for (let i = 0; i < n; i++) {
+              const prime = (await ch.recv(abort.signal)).value;
+              primes.push(prime);
+
+              const ch1 = new Chan();
+              filter(abort.signal, ch, ch1, prime);
+              ch = ch1;
+            }
+
+            return primes;
+          })());
+          return await Promise.race(promises);
+        } finally {
+          abort.abort();
+        }
+      }
+
+      // Removed benchmarking code as Benchmark.js might not be loaded,
+      // and the code is specific to a Node environment.
+
+      const numPrimes = 1000; // Reduced the number for demo purposes
+      const primes = await sieve(numPrimes);
+      document.getElementById("content").innerHTML = "Primes: " + JSON.stringify(primes);
+    } catch (e) {
+      console.error(e);
+      document.getElementById("content").innerHTML = "Error: " + e.message;
+    } finally {
+      clearInterval(h);
+    }
+  });
+</script>
+</body>
+</html>

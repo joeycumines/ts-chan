@@ -440,6 +440,12 @@ Unlike [Iterator](Iterator), it is not intended to support statefulness - a
 [Receivable](#receivable) should return equivalent (but not necessarily identical)
 [Receiver](#receiver) instances on each call to [getReceiver](#getreceiver).
 
+The [addReceiver](addReceiver) and [removeReceiver](removeReceiver) methods are low-level
+constructs, and, in most scenarios, should not be called directly.
+When using these methods, consider the impact of cycles, particularly
+microtask cycles, and ways to mitigate them. See also
+[getYieldGeneration](#getyieldgeneration) and [yieldToMacrotaskQueue](#yieldtomacrotaskqueue).
+
 Type: {addReceiver: function (callback: [ReceiverCallback](#receivercallback)\<T>): [boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean), removeReceiver: function (callback: [ReceiverCallback](#receivercallback)\<T>): void}
 
 #### Properties
@@ -499,6 +505,12 @@ Unlike [Iterator](Iterator), it is not intended to support statefulness - a
 See also [SendOnClosedChannelError](#sendonclosedchannelerror), which SHOULD be raised on
 [addSender](addSender) (if closed on add) or passed into send callbacks
 (otherwise), when attempting to send on a closed channel.
+
+The [addSender](addSender) and [removeSender](removeSender) methods are low-level
+constructs, and, in most scenarios, should not be called directly.
+When using these methods, consider the impact of cycles, particularly
+microtask cycles, and ways to mitigate them. See also
+[getYieldGeneration](#getyieldgeneration) and [yieldToMacrotaskQueue](#yieldtomacrotaskqueue).
 
 Type: {addSender: function (callback: [SenderCallback](#sendercallback)\<T>): [boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean), removeSender: function (callback: [SenderCallback](#sendercallback)\<T>): void, close: function (): void?}
 

@@ -5,6 +5,12 @@
  * Unlike {@link Iterator}, it is not intended to support statefulness - a
  * {@link Receivable} should return equivalent (but not necessarily identical)
  * {@link Receiver} instances on each call to {@link getReceiver}.
+ *
+ * The {@link addReceiver} and {@link removeReceiver} methods are low-level
+ * constructs, and, in most scenarios, should not be called directly.
+ * When using these methods, consider the impact of cycles, particularly
+ * microtask cycles, and ways to mitigate them. See also
+ * {@link getYieldGeneration} and {@link yieldToMacrotaskQueue}.
  */
 export type Receiver<T> = {
   /**
@@ -55,6 +61,12 @@ export const getReceiver = Symbol('ts-chan.getReceiver');
  * See also {@link SendOnClosedChannelError}, which SHOULD be raised on
  * {@link addSender} (if closed on add) or passed into send callbacks
  * (otherwise), when attempting to send on a closed channel.
+ *
+ * The {@link addSender} and {@link removeSender} methods are low-level
+ * constructs, and, in most scenarios, should not be called directly.
+ * When using these methods, consider the impact of cycles, particularly
+ * microtask cycles, and ways to mitigate them. See also
+ * {@link getYieldGeneration} and {@link yieldToMacrotaskQueue}.
  */
 export type Sender<T> = {
   /**
