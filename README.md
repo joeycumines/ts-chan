@@ -22,7 +22,8 @@ browsers.
 
 ### Installation
 
-    npm install --save ts-chan
+Install or import the NPM package `ts-chan`.
+Supported platforms include Node.js, Deno, and browsers.
 
 ### The microtask queue: a footgun
 
@@ -43,7 +44,7 @@ to use [getYieldGeneration](#getyieldgeneration) and
 [yieldToMacrotaskQueue](#yieldtomacrotaskqueue) like:
 
 ```ts
-async exampleHighLevelAsyncMethod() {
+const exampleHighLevelAsyncMethod = async () => {
   // ...
   const yieldGeneration = getYieldGeneration();
   const yieldPromise = yieldToMacrotaskQueue();
@@ -55,7 +56,7 @@ async exampleHighLevelAsyncMethod() {
       await yieldPromise;
     }
   }
-}
+};
 ```
 
 The above is a simple (albeit unoptimised) pattern which ensures that, so long
