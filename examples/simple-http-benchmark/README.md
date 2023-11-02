@@ -272,3 +272,127 @@ Percentage of the requests served within a certain time (ms)
              4807014  cycles elapsed
              1164032  peak memory footprint
 ```
+
+### [deno-server-baseline](deno-server-baseline)
+
+```
+Server Software:
+Server Hostname:        127.0.0.1
+Server Port:            8080
+
+Document Path:          /
+Document Length:        1048576 bytes
+
+Concurrency Level:      100
+Time taken for tests:   3.391 seconds
+Complete requests:      10000
+Failed requests:        0
+Total transferred:      10486800000 bytes
+HTML transferred:       10485760000 bytes
+Requests per second:    2948.73 [#/sec] (mean)
+Time per request:       33.913 [ms] (mean)
+Time per request:       0.339 [ms] (mean, across all concurrent requests)
+Transfer rate:          3019799.43 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.7      0      44
+Processing:     9   34   8.1     32      81
+Waiting:        2   24   6.2     23      69
+Total:          9   34   8.1     33      81
+
+Percentage of the requests served within a certain time (ms)
+  50%     33
+  66%     35
+  75%     36
+  80%     37
+  90%     40
+  95%     43
+  98%     67
+  99%     73
+ 100%     81 (longest request)
+```
+
+```
+        5.01 real         0.00 user         0.00 sys
+            11059200  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                1169  page reclaims
+                   6  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   2  signals received
+                   2  voluntary context switches
+                  46  involuntary context switches
+            11624996  instructions retired
+             6602904  cycles elapsed
+             1278720  peak memory footprint
+```
+
+### [deno-server-ping-pong](deno-server-ping-pong)
+
+Note: Deno appears to use far more aggressive garbage collection.
+
+```
+Server Software:
+Server Hostname:        127.0.0.1
+Server Port:            8080
+
+Document Path:          /
+Document Length:        1048576 bytes
+
+Concurrency Level:      100
+Time taken for tests:   10.562 seconds
+Complete requests:      10000
+Failed requests:        0
+Total transferred:      10486800000 bytes
+HTML transferred:       10485760000 bytes
+Requests per second:    946.78 [#/sec] (mean)
+Time per request:       105.622 [ms] (mean)
+Time per request:       1.056 [ms] (mean, across all concurrent requests)
+Transfer rate:          969595.46 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0   67 667.2      0    6711
+Processing:     1   38   4.9     37      84
+Waiting:        1   34   4.4     34      70
+Total:          2  105 667.9     38    6762
+
+Percentage of the requests served within a certain time (ms)
+  50%     38
+  66%     39
+  75%     39
+  80%     40
+  90%     42
+  95%     44
+  98%     62
+  99%   6739
+ 100%   6762 (longest request)
+```
+
+```
+       15.01 real         0.00 user         0.00 sys
+            11059200  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                1166  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   2  signals received
+                   2  voluntary context switches
+                  45  involuntary context switches
+            10804677  instructions retired
+             5455725  cycles elapsed
+             1164032  peak memory footprint
+```
