@@ -80,7 +80,8 @@
       "/tsconfig.json",
       "/.idea",
       "/.github",
-      "/build/test"
+      "/build/test",
+      "/examples"
     ]
   }
 }
