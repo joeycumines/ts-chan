@@ -70,9 +70,11 @@
       // Removed benchmarking code as Benchmark.js might not be loaded,
       // and the code is specific to a Node environment.
 
-      const numPrimes = 1000; // Reduced the number for demo purposes
+      const startTime = Date.now();
+      const numPrimes = 1000;
       const primes = await sieve(numPrimes);
-      document.getElementById("content").innerHTML = "Primes: " + JSON.stringify(primes);
+      document.getElementById("content").innerHTML = "Primes: " + JSON.stringify(primes) +
+        "\n<br>\n" + "Time: " + (Date.now() - startTime) + "ms";
     } catch (e) {
       console.error(e);
       document.getElementById("content").innerHTML = "Error: " + e.message;
