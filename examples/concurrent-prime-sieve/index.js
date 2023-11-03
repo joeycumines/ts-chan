@@ -1,58 +1,82 @@
 // eslint-disable-next-line no-undef
 const {Chan} = require('ts-chan');
 // eslint-disable-next-line no-undef
-const {Suite} = require('benchmark');
+const bench = require('@stdlib/bench/harness');
 
-async function generate(ch) {
-  let i = 2;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    await ch.send(i++);
+async function generate(abort, ch) {
+  try {
+    let i = 2;
+    while (true) {
+      // Should ideally have a condition to not block the browser
+      await ch.send(i++, abort);
+    }
+  } finally {
+    ch.close();
   }
 }
 
-async function filter(src, dst, prime) {
-  // eslint-disable-next-line node/no-unsupported-features/es-syntax
+async function filter(abort, src, dst, prime) {
   for await (const i of src) {
     if (i % prime !== 0) {
-      await dst.send(i);
+      await dst.send(i, abort);
     }
   }
 }
 
 async function sieve(n) {
-  const primes = [];
-  let ch = new Chan();
+  const abort = new AbortController();
+  try {
+    const promises = [];
+    promises.push(
+      (async () => {
+        const primes = [];
+        let ch = new Chan();
 
-  generate(ch);
+        promises.push(generate(abort.signal, ch));
 
-  for (let i = 0; i < n; i++) {
-    const prime = (await ch.recv()).value;
-    primes.push(prime);
+        for (let i = 0; i < n; i++) {
+          const prime = (await ch.recv(abort.signal)).value;
+          primes.push(prime);
 
-    const ch1 = new Chan();
-    filter(ch, ch1, prime);
-    ch = ch1;
+          const ch1 = new Chan();
+          filter(abort.signal, ch, ch1, prime);
+          ch = ch1;
+        }
+
+        return primes;
+      })()
+    );
+    return await Promise.race(promises);
+  } finally {
+    abort.abort();
   }
-  return primes;
 }
 
 void (async () => {
   const numPrimes = 1000;
 
+  const startTime = Date.now();
   console.log(JSON.stringify(await sieve(numPrimes)));
+  console.log(`sieve: ${Date.now() - startTime}ms`);
 
-  const bench = new Suite();
-
-  bench.add('sieve', async () => {
-    await sieve(numPrimes);
+  bench('sieve', async b => {
+    let x;
+    try {
+      b.tic();
+      for (let i = 0; i < b.iterations; i++) {
+        x = await sieve(numPrimes);
+        if (x !== x) {
+          b.fail('something went wrong!');
+        }
+      }
+      b.toc();
+    } catch (e) {
+      b.fail(`uncaught exception: ${e}`);
+    } finally {
+      if (x !== x) {
+        b.fail('something went wrong!');
+      }
+      b.end();
+    }
   });
-
-  bench.on('complete', function () {
-    console.log(this[0].toString(), 'DONE');
-    // eslint-disable-next-line no-process-exit
-    process.exit(0);
-  });
-
-  bench.run();
 })();

@@ -2,7 +2,7 @@
   "name": "concurrent-prime-sieve",
   "private": true,
   "dependencies": {
-    "benchmark": "^2.1.4",
+    "@stdlib/stdlib": "^0.0.96",
     "ts-chan": "latest"
   }
 }
