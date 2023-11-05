@@ -1,36 +1,26 @@
 import {
   selectState,
   type SelectCase,
-  type CaseStatePromise,
   newLockedSenderCallback,
   type SelectSemaphoreToken,
   newLockedReceiverCallback,
+  wait,
+  type SelectCaseSender,
+  type SelectCaseReceiver,
   type SelectCasePromise,
 } from './case';
 import {random as mathRandom} from './math';
 import {getYieldGeneration, yieldToMacrotaskQueue} from './yield';
-
-export type SelectCaseInputs =
-  | readonly (SelectCase<any> | PromiseLike<any>)[]
-  | [];
-
-export type SelectCases<T extends SelectCaseInputs> = {
-  readonly [P in keyof T]: SelectCase<UnwrapSelectCase<T[P]>>;
-} & {
-  readonly length: number;
-};
-
-export type UnwrapSelectCase<T> = T extends SelectCase<infer U>
-  ? U
-  : T extends PromiseLike<any>
-  ? Awaited<T>
-  : never;
 
 /**
  * Select implements the functionality of Go's select statement, with support
  * for support cases comprised of {@link Sender}, {@link Receiver}, or
  * {@link PromiseLike}, which are treated as a single-value never-closed
  * channel.
+ *
+ * See also {@link promises}, which is a convenience method for creating a
+ * select instance with promise cases, or a mix of both promises and other
+ * cases.
  *
  * @param {Array<SelectCase|Promise|*>} cases The cases to select from, which
  *   must be initialized using {@link .send}, {@link .recv}, unless they are
@@ -39,11 +29,11 @@ export type UnwrapSelectCase<T> = T extends SelectCase<infer U>
  * @template T Array of cases to select from, providing type support for
  *   received values. See also {@link cases} and {@link recv}.
  */
-export class Select<T extends SelectCaseInputs> {
+export class Select<T extends readonly SelectCase<any>[] | []> {
   // Input cases, after converting any non-cases to the promise variant.
   // Returned via the cases property, which is used to provide per-element
   // types.
-  #cases: SelectCases<T>;
+  #cases: T;
 
   // Cases currently under consideration.
   #pending: SelectCase<unknown>[typeof selectState][];
@@ -88,11 +78,46 @@ export class Select<T extends SelectCaseInputs> {
   }
 
   /**
+   * Promises is a convenience method for creating a select instance with
+   * promise cases, or a mix of both promises and other cases.
+   *
+   * Note that the behavior is identical to passing the same array to the
+   * constructor. The constructor's typing is more strict, to simplify
+   * implementations which encapsulate or construct select instances.
+   */
+  static promises<
+    T extends readonly (SelectCase<any> | PromiseLike<any>)[] | [],
+  >(
+    cases: T
+  ): Select<
+    {
+      readonly [K in keyof T]: T[K] extends SelectCaseSender<infer U>
+        ? SelectCaseSender<U>
+        : T[K] extends SelectCaseReceiver<infer U>
+        ? SelectCaseReceiver<U>
+        : T[K] extends SelectCasePromise<infer U>
+        ? SelectCasePromise<U>
+        : T[K] extends SelectCase<infer U>
+        ? SelectCase<U>
+        : T[K] extends PromiseLike<infer U>
+        ? SelectCasePromise<Awaited<U>>
+        : never;
+    } & {
+      readonly length: T['length'];
+    }
+  > {
+    return new Select(cases as any);
+  }
+
+  /**
    * Retrieves the cases associated with this select instance.
    *
    * Each case corresponds to an input case (including order).
-   * After selecting a case, via {@link poll} or {@link wait}, received values
-   * may be retrieved by calling {@link recv} with the corresponding case.
+   * After selecting a case, via {@link Select.poll} or {@link Select.wait},
+   * received values may be retrieved by calling {@link Select.recv} with the
+   * corresponding case.
+   *
+   * @returns T
    *
    * @example
    * Accessing a (typed) received value:
@@ -132,17 +157,20 @@ export class Select<T extends SelectCaseInputs> {
    * }
    * ```
    */
-  get cases(): SelectCases<T> {
+  get cases(): {
+    readonly [K in keyof T]: T[K];
+  } {
     return this.#cases;
   }
 
   /**
    * Poll returns the next case that is ready, or undefined if none are
-   * ready. It must not be called concurrently with {@link wait} or
-   * {@link recv}.
+   * ready. It must not be called concurrently with {@link Select.wait} or
+   * {@link Select.recv}.
    *
-   * This is effectively a non-blocking version of {@link wait}, and fills the
-   * same role as the `default` select case, in Go's select statement.
+   * This is effectively a non-blocking version of {@link Select.wait}, and
+   * fills the same role as the `default` select case, in Go's select
+   * statement.
    */
   poll(): number | undefined {
     this.#throwIfInUse();
@@ -171,7 +199,7 @@ export class Select<T extends SelectCaseInputs> {
     for (const pending of this.#pending) {
       // in all cases, a non-undefined ok means this case is up next
       if (pending.ok !== undefined) {
-        if (pending.prom !== undefined) {
+        if (pending.wait !== undefined) {
           // promise cases will be removed on recv, meaning we don't need to re-shuffle
           this.#reshuffle = false;
         }
@@ -374,7 +402,7 @@ export class Select<T extends SelectCaseInputs> {
             };
             break;
         }
-      } else if (v[selectState].prom !== undefined) {
+      } else if (v[selectState].wait !== undefined) {
         switch (v[selectState].ok) {
           case true:
             // resolved
@@ -463,16 +491,23 @@ let stopForMapPendingValue: ((id: SelectSemaphoreToken) => void) | undefined;
 let selectSemaphoreForMapPendingValue: SelectSemaphore | undefined;
 
 // Converts any non-cases to the promise variant, returns a new array.
-const mapPendingValues = <T extends SelectCaseInputs>(
+const mapPendingValues = <T extends readonly SelectCase<any>[] | []>(
   cases: T,
   stop: Exclude<typeof stopForMapPendingValue, undefined>,
   selectSemaphore: Exclude<typeof selectSemaphoreForMapPendingValue, undefined>
-) => {
+): T => {
+  if (
+    stopForMapPendingValue !== undefined ||
+    selectSemaphoreForMapPendingValue !== undefined
+  ) {
+    throw new Error(
+      'ts-chan: select: unexpected error that should never happen: stop vars set'
+    );
+  }
   stopForMapPendingValue = stop;
   selectSemaphoreForMapPendingValue = selectSemaphore;
   try {
-    const mapped: SelectCase<unknown>[] = cases.map(mapPendingValue);
-    return mapped as SelectCases<T>;
+    return cases.map(mapPendingValue) as T;
   } finally {
     stopForMapPendingValue = undefined;
     selectSemaphoreForMapPendingValue = undefined;
@@ -481,7 +516,7 @@ const mapPendingValues = <T extends SelectCaseInputs>(
 
 // Part of the implementation of {@link mapPendingValues}, should never be
 // called directly.
-const mapPendingValue = <T>(v: T, i: number) => {
+const mapPendingValue = <T extends SelectCase<any>>(v: T, i: number): T => {
   if (
     stopForMapPendingValue === undefined ||
     selectSemaphoreForMapPendingValue === undefined
@@ -493,203 +528,200 @@ const mapPendingValue = <T>(v: T, i: number) => {
   const stop = stopForMapPendingValue;
   const selectSemaphore = selectSemaphoreForMapPendingValue;
 
-  if (isSelectCase(v)) {
-    if (v[selectState].cidx !== undefined) {
-      throw new Error('ts-chan: select: case reused');
-    }
-
-    v[selectState].cidx = i;
-    // note: pidx set on shuffle
-
-    let pendingResolve: ((value: number) => void) | undefined;
-    let pendingReject: ((reason: unknown) => void) | undefined;
-
-    if (v[selectState].send !== undefined) {
-      const s = v[selectState];
-
-      s.lscb = (token, err, ok) => {
-        if (token !== selectSemaphore.token) {
-          throw new Error(
-            'ts-chan: select: send: channel protocol misuse: callback called after remove'
-          );
-        }
-
-        // always this callback (instance - bound token) or already undefined
-        s.cscb = undefined;
-
-        if (!ok) {
-          // failed to send - reject with error
-          pendingReject?.(err);
-          pendingReject = undefined;
-          pendingResolve = undefined;
-          // throw err, as dictated by the protocol
-          throw err;
-        }
-
-        try {
-          stop(token);
-          const result = s.expr();
-          s.ok = true;
-          pendingResolve?.(i);
-          return result;
-        } catch (e) {
-          pendingReject?.(e);
-          throw e;
-        } finally {
-          pendingResolve = undefined;
-          pendingReject = undefined;
-        }
-      };
-
-      // kicks off send
-      s.then = (onfulfilled, onrejected) => {
-        return new Promise<number>((resolve, reject) => {
-          if (selectSemaphore.token === undefined) {
-            throw errThenCalledAfterStop;
-          }
-          if (s.cscb !== undefined) {
-            throw new Error(
-              'ts-chan: select: send: unexpected error that should never happen: already added sender'
-            );
-          }
-
-          const scb = newLockedSenderCallback(s.lscb, selectSemaphore.token);
-
-          pendingResolve = resolve;
-          pendingReject = reject;
-          try {
-            if (s.send.addSender(scb)) {
-              // added, all we can do is wait for the callback
-              s.cscb = scb;
-              return;
-            }
-          } catch (e) {
-            pendingResolve = undefined;
-            pendingReject = undefined;
-            throw e;
-          }
-
-          // sanity check - scb should have been called synchronously
-          if (pendingResolve !== undefined || pendingReject !== undefined) {
-            pendingResolve = undefined;
-            pendingReject = undefined;
-            throw new Error(
-              'ts-chan: select: send: channel protocol misuse: addSender returned false but did not call the callback synchronously'
-            );
-          }
-        }).then(onfulfilled, onrejected);
-      };
-    } else if (v[selectState].recv !== undefined) {
-      const s = v[selectState];
-
-      s.lrcb = (token: SelectSemaphoreToken, val, ok) => {
-        if (token !== selectSemaphore.token) {
-          throw new Error(
-            'ts-chan: select: recv: channel protocol misuse: callback called after remove'
-          );
-        }
-
-        // always this callback (instance - bound token) or already undefined
-        s.crcb = undefined;
-
-        try {
-          s.next = val;
-          s.ok = ok;
-          // after handling the data but before resolve - in case it throws (it calls external code)
-          stop(token);
-          pendingResolve?.(i);
-        } catch (e) {
-          pendingReject?.(e);
-          throw e;
-        } finally {
-          pendingResolve = undefined;
-          pendingReject = undefined;
-        }
-      };
-
-      // kicks off recv
-      s.then = (onfulfilled, onrejected) => {
-        return new Promise<number>((resolve, reject) => {
-          if (selectSemaphore.token === undefined) {
-            throw errThenCalledAfterStop;
-          }
-          if (s.crcb !== undefined) {
-            throw new Error(
-              'ts-chan: select: recv: unexpected error that should never happen: already added receiver'
-            );
-          }
-
-          const rcb = newLockedReceiverCallback(s.lrcb, selectSemaphore.token);
-
-          pendingResolve = resolve;
-          pendingReject = reject;
-          try {
-            if (s.recv.addReceiver(rcb)) {
-              // added, all we can do is wait for the callback
-              s.crcb = rcb;
-              return;
-            }
-          } catch (e) {
-            pendingResolve = undefined;
-            pendingReject = undefined;
-            throw e;
-          }
-
-          // sanity check - rcb should have been called synchronously
-          if (pendingResolve !== undefined || pendingReject !== undefined) {
-            pendingResolve = undefined;
-            pendingReject = undefined;
-            throw new Error(
-              'ts-chan: select: recv: channel protocol misuse: addReceiver returned false but did not call the callback synchronously'
-            );
-          }
-        }).then(onfulfilled, onrejected);
-      };
-    } else {
-      throw new Error(
-        'ts-chan: select: unexpected error that should never happen: case has neither send nor recv'
-      );
-    }
-
-    return v;
+  if (!isSelectCase(v)) {
+    v = wait(v as any) as T;
   }
 
-  const prom = Promise.resolve(v)
-    .then(v => {
-      s.ok = true;
-      s.next = v;
-    })
-    .catch(e => {
-      s.ok = false;
-      s.next = e;
-    });
+  if (v[selectState].cidx !== undefined) {
+    throw new Error('ts-chan: select: case reused');
+  }
 
-  const s: CaseStatePromise<Awaited<T>> = {
-    cidx: i,
-    prom,
-    then: (onfulfilled, onrejected) => {
+  v[selectState].cidx = i;
+  // note: pidx set on shuffle
+
+  let pendingResolve: ((value: number) => void) | undefined;
+  let pendingReject: ((reason: unknown) => void) | undefined;
+
+  if (v[selectState].send !== undefined) {
+    const s = v[selectState];
+
+    s.lscb = (token, err, ok) => {
+      if (token !== selectSemaphore.token) {
+        throw new Error(
+          'ts-chan: select: send: channel protocol misuse: callback called after remove'
+        );
+      }
+
+      // always this callback (instance - bound token) or already undefined
+      s.cscb = undefined;
+
+      if (!ok) {
+        // failed to send - reject with error
+        pendingReject?.(err);
+        pendingReject = undefined;
+        pendingResolve = undefined;
+        // throw err, as dictated by the protocol
+        throw err;
+      }
+
+      try {
+        stop(token);
+        const result = s.expr();
+        s.ok = true;
+        pendingResolve?.(i);
+        return result;
+      } catch (e) {
+        pendingReject?.(e);
+        throw e;
+      } finally {
+        pendingResolve = undefined;
+        pendingReject = undefined;
+      }
+    };
+
+    // kicks off send
+    s.then = (onfulfilled, onrejected) => {
+      return new Promise<number>((resolve, reject) => {
+        if (selectSemaphore.token === undefined) {
+          throw errThenCalledAfterStop;
+        }
+        if (s.cscb !== undefined) {
+          throw new Error(
+            'ts-chan: select: send: unexpected error that should never happen: already added sender'
+          );
+        }
+
+        const scb = newLockedSenderCallback(s.lscb, selectSemaphore.token);
+
+        pendingResolve = resolve;
+        pendingReject = reject;
+        try {
+          if (s.send.addSender(scb)) {
+            // added, all we can do is wait for the callback
+            s.cscb = scb;
+            return;
+          }
+        } catch (e) {
+          pendingResolve = undefined;
+          pendingReject = undefined;
+          throw e;
+        }
+
+        // sanity check - scb should have been called synchronously
+        if (pendingResolve !== undefined || pendingReject !== undefined) {
+          pendingResolve = undefined;
+          pendingReject = undefined;
+          throw new Error(
+            'ts-chan: select: send: channel protocol misuse: addSender returned false but did not call the callback synchronously'
+          );
+        }
+      }).then(onfulfilled, onrejected);
+    };
+  } else if (v[selectState].recv !== undefined) {
+    const s = v[selectState];
+
+    s.lrcb = (token: SelectSemaphoreToken, val, ok) => {
+      if (token !== selectSemaphore.token) {
+        throw new Error(
+          'ts-chan: select: recv: channel protocol misuse: callback called after remove'
+        );
+      }
+
+      // always this callback (instance - bound token) or already undefined
+      s.crcb = undefined;
+
+      try {
+        s.next = val;
+        s.ok = ok;
+        // after handling the data but before resolve - in case it throws (it calls external code)
+        stop(token);
+        pendingResolve?.(i);
+      } catch (e) {
+        pendingReject?.(e);
+        throw e;
+      } finally {
+        pendingResolve = undefined;
+        pendingReject = undefined;
+      }
+    };
+
+    // kicks off recv
+    s.then = (onfulfilled, onrejected) => {
+      return new Promise<number>((resolve, reject) => {
+        if (selectSemaphore.token === undefined) {
+          throw errThenCalledAfterStop;
+        }
+        if (s.crcb !== undefined) {
+          throw new Error(
+            'ts-chan: select: recv: unexpected error that should never happen: already added receiver'
+          );
+        }
+
+        const rcb = newLockedReceiverCallback(s.lrcb, selectSemaphore.token);
+
+        pendingResolve = resolve;
+        pendingReject = reject;
+        try {
+          if (s.recv.addReceiver(rcb)) {
+            // added, all we can do is wait for the callback
+            s.crcb = rcb;
+            return;
+          }
+        } catch (e) {
+          pendingResolve = undefined;
+          pendingReject = undefined;
+          throw e;
+        }
+
+        // sanity check - rcb should have been called synchronously
+        if (pendingResolve !== undefined || pendingReject !== undefined) {
+          pendingResolve = undefined;
+          pendingReject = undefined;
+          throw new Error(
+            'ts-chan: select: recv: channel protocol misuse: addReceiver returned false but did not call the callback synchronously'
+          );
+        }
+      }).then(onfulfilled, onrejected);
+    };
+  } else if (v[selectState].pval !== undefined) {
+    const s = v[selectState];
+
+    s.wait = Promise.resolve(s.pval)
+      .then(v => {
+        s.ok = true;
+        s.next = v;
+      })
+      .catch(e => {
+        s.ok = false;
+        s.next = e;
+      });
+
+    s.then = (onfulfilled, onrejected) => {
       if (selectSemaphore.token === undefined) {
         return Promise.reject(errThenCalledAfterStop);
       }
       const token = selectSemaphore.token;
-      return prom
+      return s.wait
         .then(() => {
           stop(token);
           return i;
         })
         .then(onfulfilled, onrejected);
-    },
-  };
+    };
+  } else {
+    let d: unknown;
+    try {
+      d = JSON.stringify(v);
+    } catch {
+      d = v;
+    }
+    throw new Error(`ts-chan: select: invalid case at ${i}: ${d}`);
+  }
 
-  const c: SelectCasePromise<Awaited<typeof v>> = {
-    type: 'Promise',
-    [selectState]: s,
-  };
-
-  return c;
+  return v;
 };
 
-const isSelectCase = <T>(value: T): value is T & SelectCase<any> => {
+const isSelectCase = <T>(value: T): value is T & SelectCase<unknown> => {
   return typeof value === 'object' && value !== null && selectState in value;
 };
 

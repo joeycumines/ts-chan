@@ -1,5 +1,12 @@
 import {Select} from '../src/select';
-import {recv, send} from '../src/case';
+import {
+  recv,
+  type SelectCasePromise,
+  type SelectCaseReceiver,
+  type SelectCaseSender,
+  send,
+  wait,
+} from '../src/case';
 import {Chan} from '../src/chan';
 
 describe('Select', () => {
@@ -151,7 +158,7 @@ describe('Select', () => {
       });
       const rejectedPromise = Promise.reject('error');
 
-      const select = new Select([
+      const select = Select.promises([
         recv(ch),
         immediateResolvedPromise,
         delayedResolvedPromise,
@@ -428,7 +435,7 @@ describe('Select', () => {
       const chanNumber = new Chan<number>(1);
       const chanString = new Chan<string>(1);
       const promiseBoolean = Promise.resolve<true>(true);
-      const select = new Select([
+      const select = Select.promises([
         recv(chanNumber),
         recv(chanString),
         promiseBoolean,
@@ -555,7 +562,7 @@ describe('Select', () => {
       describe('Select used as Promise.race', () => {
         tests(
           async <T>(values: Iterable<PromiseLike<T>>): Promise<Awaited<T>> => {
-            const select = new Select(Array.from(values));
+            const select = Select.promises(Array.from(values));
             // eslint-disable-next-line no-constant-condition
             while (true) {
               const v = select.recv(select.cases[await select.wait()]);
@@ -568,5 +575,189 @@ describe('Select', () => {
         );
       });
     });
+  });
+
+  test('promise cases built using the wait function', async () => {
+    const resolves: Record<string, (v: any) => void> = {};
+    const a = new Promise<'A'>(resolve => {
+      resolves['a'] = resolve;
+    });
+    const b = new Promise<'B'>(resolve => {
+      resolves['b'] = resolve;
+    });
+    const c = new Promise<'C'>(resolve => {
+      resolves['c'] = resolve;
+    });
+    const ch1 = new Chan<'CH1'>();
+    const ch2 = new Chan<'CH2'>();
+    const select = new Select([
+      wait(a),
+      wait(b),
+      wait(c),
+      send(ch1, (): 'CH1' => 'CH1'),
+      recv(ch2),
+      wait(new Promise<'P1'>(() => {})),
+    ]);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(select.poll()).toBeUndefined();
+
+    resolves['b']('B');
+    resolves['a']('A');
+
+    await expect(select.wait()).resolves.toBe(1);
+    const bv: IteratorResult<
+      Awaited<typeof b>,
+      Awaited<typeof b> | undefined
+    > = select.recv(select.cases[1]);
+    expect(bv).toStrictEqual({done: false, value: 'B'});
+
+    resolves['c']('C');
+
+    await expect(select.wait()).resolves.toBe(0);
+    const av: IteratorResult<
+      Awaited<typeof a>,
+      Awaited<typeof a> | undefined
+    > = select.recv(select.cases[0]);
+    expect(av).toStrictEqual({done: false, value: 'A'});
+
+    await expect(select.wait()).resolves.toBe(2);
+    // @ts-expect-error -- testing that fails on invalid type
+    const cv: IteratorResult<
+      Awaited<typeof a>,
+      Awaited<typeof a> | undefined
+    > = select.recv(select.cases[2]);
+    expect(cv).toStrictEqual({done: false, value: 'C'});
+
+    const sendCaseCh1: SelectCaseSender<'CH1'> = select.cases[3];
+    expect(sendCaseCh1).not.toBeUndefined();
+
+    const recvCaseCh2: SelectCaseReceiver<'CH2'> = select.cases[4];
+    expect(recvCaseCh2).not.toBeUndefined();
+
+    const waitCaseP1: SelectCasePromise<'P1'> = select.cases[5];
+    expect(waitCaseP1).not.toBeUndefined();
+
+    // more type assertions to ensure it fails when used incorrectly
+
+    // @ts-expect-error -- testing that fails on invalid type
+    const sendCaseCh1_2: SelectCaseSender<'CH1'> = select.cases[4];
+    expect(sendCaseCh1_2).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const recvCaseCh2_2: SelectCaseReceiver<'CH2'> = select.cases[3];
+    expect(recvCaseCh2_2).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_2: SelectCasePromise<'P1'> = select.cases[3];
+    expect(waitCaseP1_2).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_3: SelectCasePromise<'P1'> = select.cases[4];
+    expect(waitCaseP1_3).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_5: SelectCasePromise<'P1'> = select.cases[0];
+    expect(waitCaseP1_5).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_6: SelectCasePromise<'P1'> = select.cases[1];
+    expect(waitCaseP1_6).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_7: SelectCasePromise<'P1'> = select.cases[2];
+    expect(waitCaseP1_7).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_8: SelectCasePromise<'P1'> = select.cases[6];
+    expect(waitCaseP1_8).toBeUndefined();
+  });
+
+  test('promise cases built using using Select.promises', async () => {
+    const resolves: Record<string, (v: any) => void> = {};
+    const a = new Promise<'A'>(resolve => {
+      resolves['a'] = resolve;
+    });
+    const b = new Promise<'B'>(resolve => {
+      resolves['b'] = resolve;
+    });
+    const c = new Promise<'C'>(resolve => {
+      resolves['c'] = resolve;
+    });
+    const ch1 = new Chan<'CH1'>();
+    const ch2 = new Chan<'CH2'>();
+    const select = Select.promises([
+      a,
+      b,
+      c,
+      send(ch1, (): 'CH1' => 'CH1'),
+      recv(ch2),
+      wait(new Promise<'P1'>(() => {})),
+    ]);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(select.poll()).toBeUndefined();
+
+    resolves['b']('B');
+    resolves['a']('A');
+
+    await expect(select.wait()).resolves.toBe(1);
+    const bv: IteratorResult<
+      Awaited<typeof b>,
+      Awaited<typeof b> | undefined
+    > = select.recv(select.cases[1]);
+    expect(bv).toStrictEqual({done: false, value: 'B'});
+
+    resolves['c']('C');
+
+    await expect(select.wait()).resolves.toBe(0);
+    const av: IteratorResult<
+      Awaited<typeof a>,
+      Awaited<typeof a> | undefined
+    > = select.recv(select.cases[0]);
+    expect(av).toStrictEqual({done: false, value: 'A'});
+
+    await expect(select.wait()).resolves.toBe(2);
+    // @ts-expect-error -- testing that fails on invalid type
+    const cv: IteratorResult<
+      Awaited<typeof a>,
+      Awaited<typeof a> | undefined
+    > = select.recv(select.cases[2]);
+    expect(cv).toStrictEqual({done: false, value: 'C'});
+
+    const sendCaseCh1: SelectCaseSender<'CH1'> = select.cases[3];
+    expect(sendCaseCh1).not.toBeUndefined();
+
+    const recvCaseCh2: SelectCaseReceiver<'CH2'> = select.cases[4];
+    expect(recvCaseCh2).not.toBeUndefined();
+
+    const waitCaseP1: SelectCasePromise<'P1'> = select.cases[5];
+    expect(waitCaseP1).not.toBeUndefined();
+
+    // more type assertions to ensure it fails when used incorrectly
+
+    // @ts-expect-error -- testing that fails on invalid type
+    const sendCaseCh1_2: SelectCaseSender<'CH1'> = select.cases[4];
+    expect(sendCaseCh1_2).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const recvCaseCh2_2: SelectCaseReceiver<'CH2'> = select.cases[3];
+    expect(recvCaseCh2_2).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_2: SelectCasePromise<'P1'> = select.cases[3];
+    expect(waitCaseP1_2).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_3: SelectCasePromise<'P1'> = select.cases[4];
+    expect(waitCaseP1_3).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_5: SelectCasePromise<'P1'> = select.cases[0];
+    expect(waitCaseP1_5).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_6: SelectCasePromise<'P1'> = select.cases[1];
+    expect(waitCaseP1_6).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_7: SelectCasePromise<'P1'> = select.cases[2];
+    expect(waitCaseP1_7).not.toBeUndefined();
+    // @ts-expect-error -- testing that fails on invalid type
+    const waitCaseP1_8: SelectCasePromise<'P1'> = select.cases[6];
+    expect(waitCaseP1_8).toBeUndefined();
+  });
+
+  test('types stop you mutating the cases', () => {
+    const select = new Select<[SelectCaseReceiver<number>]>([recv(new Chan())]);
+    // @ts-expect-error -- testing that fails on operation
+    select.cases[0] = recv(new Chan());
+    // @ts-expect-error -- testing that fails on operation
+    select.cases.length = 5;
   });
 });

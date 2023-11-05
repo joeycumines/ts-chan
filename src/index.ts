@@ -20,13 +20,16 @@ export {
   type SelectCasePromise,
   recv,
   send,
+  wait,
 } from './case';
 
+export {Select} from './select';
+
 export {
-  type SelectCaseInputs,
-  type SelectCases,
-  type UnwrapSelectCase,
-  Select,
-} from './select';
+  type SelectFactoryCase,
+  type SelectFactoryCaseSender,
+  type SelectFactoryCaseReceiver,
+  SelectFactory,
+} from './select-factory';
 
 export {getYieldGeneration, yieldToMacrotaskQueue} from './yield';

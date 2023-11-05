@@ -164,13 +164,13 @@ export const setImmediatePolyfill: SetImmediate =
   typeof setImmediate === 'function'
     ? setImmediate
     : polyfillSetImmediate(
-        // @ts-ignore
+        // @ts-expect-error -- self is expected to be undefined in node
         // eslint-disable-next-line no-undef
         typeof self === 'undefined'
           ? typeof global === 'undefined'
             ? this
             : global
-          : // @ts-ignore
+          : // @ts-expect-error -- self is expected to be undefined in node
             // eslint-disable-next-line no-undef
             self
       ) ?? (fn => setTimeout(fn, 0));

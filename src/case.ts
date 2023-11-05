@@ -75,7 +75,8 @@ export type CaseStateSender<T> = CaseStateCommon & {
   lrcb?: undefined;
   crcb?: undefined;
 
-  prom?: undefined;
+  pval?: undefined;
+  wait?: undefined;
 
   next?: undefined;
 } & ( // not sent
@@ -104,7 +105,8 @@ export type CaseStateReceiver<T> = CaseStateCommon & {
   lscb?: undefined;
   cscb?: undefined;
 
-  prom?: undefined;
+  pval?: undefined;
+  wait?: undefined;
 } & ( // not received
     | {
         next?: undefined;
@@ -123,8 +125,10 @@ export type CaseStateReceiver<T> = CaseStateCommon & {
   );
 
 export type CaseStatePromise<T> = CaseStateCommon & {
+  // original PromiseLike value
+  pval?: unknown;
   // original promise/value, wrapped (with catch) to propagate the result
-  prom: Promise<void>;
+  wait: Promise<void>;
 
   send?: undefined;
   lscb?: undefined;
@@ -175,9 +179,9 @@ export const recv = <T>(
 
     // set later
 
-    cidx: undefined as any,
-    lrcb: undefined as any,
-    then: undefined as any,
+    cidx: undefined!,
+    lrcb: undefined!,
+    then: undefined!,
   });
 
 /**
@@ -202,9 +206,27 @@ export const send = <T>(
 
     // set later
 
-    cidx: undefined as any,
-    lscb: undefined as any,
-    then: undefined as any,
+    cidx: undefined!,
+    lscb: undefined!,
+    then: undefined!,
+  });
+
+/**
+ * Prepares a {@link SelectCasePromise} case, to be used in a {@link Select}.
+ *
+ * WARNING: Cases may only be used in a single select instance, though select
+ * instances are intended to be reused, e.g. when implementing control loops.
+ */
+export const wait = <T>(value: PromiseLike<T>): SelectCasePromise<Awaited<T>> =>
+  newSelectCase('Promise', {
+    // WARNING: any additional logic that assumes value is actually PromiseLike will break where this is used in select.ts
+    pval: value,
+
+    // set later
+
+    wait: undefined!,
+    cidx: undefined!,
+    then: undefined!,
   });
 
 const newSelectCase = <R extends SelectCase<V>, T extends R['type'], V>(

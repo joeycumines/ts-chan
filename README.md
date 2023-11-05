@@ -120,6 +120,12 @@ also supported, though they have no analogue, in Go.
     serves a similar purpose as the `default` case in Go's `select` statement.
     If no case is ready, `poll` will return `undefined`, offering a
     non-blocking alternative.
+4.  **Case Evaluation Order**: (Optional, see below) The
+    [SelectFactory](#selectfactory) class may be used to evaluate senders,
+    receivers, and values (to send), in source order, and is intended to be
+    used within loops and similar. Use of this class may avoid unnecessary
+    recreation of select cases, on each iteration, with the caveat that it
+    does not (currently) support promises.
 
 ##### Differences
 
@@ -139,9 +145,9 @@ also supported, though they have no analogue, in Go.
     and has no (type-based) mechanism to describe whether the channel supports
     it, or not.
 4.  **Case Evaluation Order**: This is an interesting topic, and I found that
-    Go's behavior was not exactly what I expected. I may add similar send value
-    evaluation as an optional feature, at some later date.
-    For reference, from
+    Go's behavior was not exactly what I expected. For simplicity, this
+    functionality was omitted from `Select`, and is provided by
+    `SelectFactory`, instead. For reference, from
     the [Go spec](https://go.dev/ref/spec#Select_statements):
     > For all the cases in the statement, the channel operands of receive
     > operations and the channel and right-hand-side expressions of send
@@ -221,15 +227,23 @@ also supported, though they have no analogue, in Go.
     *   [Parameters](#parameters-10)
 *   [send](#send-1)
     *   [Parameters](#parameters-11)
-*   [Select](#select)
+*   [wait](#wait)
     *   [Parameters](#parameters-12)
+*   [Select](#select)
+    *   [Parameters](#parameters-13)
     *   [cases](#cases)
         *   [Examples](#examples)
     *   [poll](#poll)
-    *   [wait](#wait)
-        *   [Parameters](#parameters-13)
-    *   [recv](#recv-2)
+    *   [wait](#wait-1)
         *   [Parameters](#parameters-14)
+    *   [recv](#recv-2)
+        *   [Parameters](#parameters-15)
+    *   [promises](#promises)
+        *   [Parameters](#parameters-16)
+*   [SelectFactory](#selectfactory)
+    *   [clear](#clear)
+    *   [with](#with)
+        *   [Parameters](#parameters-17)
 *   [getYieldGeneration](#getyieldgeneration)
 *   [yieldToMacrotaskQueue](#yieldtomacrotaskqueue)
 
@@ -728,12 +742,29 @@ instances are intended to be reused, e.g. when implementing control loops.
 
 Returns **[SelectCaseSender](#selectcasesender)\<T>**&#x20;
 
+### wait
+
+Prepares a [SelectCasePromise](#selectcasepromise) case, to be used in a [Select](#select).
+
+WARNING: Cases may only be used in a single select instance, though select
+instances are intended to be reused, e.g. when implementing control loops.
+
+#### Parameters
+
+*   `value` **PromiseLike\<T>**&#x20;
+
+Returns **[SelectCasePromise](#selectcasepromise)\<Awaited\<T>>**&#x20;
+
 ### Select
 
 Select implements the functionality of Go's select statement, with support
 for support cases comprised of [Sender](#sender), [Receiver](#receiver), or
 [PromiseLike](PromiseLike), which are treated as a single-value never-closed
 channel.
+
+See also [promises](promises), which is a convenience method for creating a
+select instance with promise cases, or a mix of both promises and other
+cases.
 
 #### Parameters
 
@@ -746,10 +777,11 @@ channel.
 Retrieves the cases associated with this select instance.
 
 Each case corresponds to an input case (including order).
-After selecting a case, via [poll](poll) or [wait](wait), received values
-may be retrieved by calling [recv](#recv) with the corresponding case.
+After selecting a case, via [Select.poll](Select.poll) or [Select.wait](Select.wait),
+received values may be retrieved by calling [Select.recv](Select.recv) with the
+corresponding case.
 
-Type: SelectCases\<T>
+Type: any
 
 ##### Examples
 
@@ -790,16 +822,17 @@ for (let running = true; running;) {
 }
 ```
 
-Returns **SelectCases\<T>**&#x20;
+Returns **any** T
 
 #### poll
 
 Poll returns the next case that is ready, or undefined if none are
-ready. It must not be called concurrently with [wait](wait) or
-[recv](#recv).
+ready. It must not be called concurrently with [Select.wait](Select.wait) or
+[Select.recv](Select.recv).
 
-This is effectively a non-blocking version of [wait](wait), and fills the
-same role as the `default` select case, in Go's select statement.
+This is effectively a non-blocking version of [Select.wait](Select.wait), and
+fills the same role as the `default` select case, in Go's select
+statement.
 
 Returns **([number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number) | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))**&#x20;
 
@@ -823,6 +856,57 @@ Consume the result of a ready case.
 *   `v` **[SelectCase](#selectcase)\<T>**&#x20;
 
 Returns **IteratorResult\<T, (T | [undefined](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined))>**&#x20;
+
+#### promises
+
+Promises is a convenience method for creating a select instance with
+promise cases, or a mix of both promises and other cases.
+
+Note that the behavior is identical to passing the same array to the
+constructor. The constructor's typing is more strict, to simplify
+implementations which encapsulate or construct select instances.
+
+##### Parameters
+
+*   `cases` **T**&#x20;
+
+Returns **[Select](#select)\<any>**&#x20;
+
+### SelectFactory
+
+A wrapper of [Select](#select) that's intended for use within loops, that
+allows the contents of select cases (but not the structure, namely the
+direction/type of communication) to be updated, and evaluated as
+expressions, in code order.
+
+With the caveat that it does not support promises, this is the closest
+analogue to Go's select statement, provided by this module.
+
+#### clear
+
+Clears references to values to send, receives and senders, but not the
+select cases themselves. Use cases include avoiding retaining references
+between iterations of a loop, if such references are not needed, or may
+be problematic.
+
+WARNING: Must not be called concurrently with [Select.wait](Select.wait) (on the
+underlying instance for this factory). Calling this method then calling
+either [Select.wait](Select.wait) or [Select.poll](Select.poll) (prior to another
+[with](with)) may result in an error.
+
+#### with
+
+With should be to configure and retrieve (or initialize) the underlying
+[Select](#select) instance.
+
+Must be called with the same number of cases each time, with each case
+having the same direction.
+
+##### Parameters
+
+*   `cases` **T**&#x20;
+
+Returns **[Select](#select)\<any>**&#x20;
 
 ### getYieldGeneration
 
