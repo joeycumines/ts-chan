@@ -7,7 +7,6 @@ async function generate(abort, ch) {
   try {
     let i = 2;
     while (true) {
-      // Should ideally have a condition to not block the browser
       await ch.send(i++, abort);
     }
   } finally {

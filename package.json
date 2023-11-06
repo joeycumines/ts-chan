@@ -81,7 +81,8 @@
       "/.idea",
       "/.github",
       "/build/test",
-      "/examples"
+      "/examples",
+      "/.prettierignore"
     ]
   }
 }

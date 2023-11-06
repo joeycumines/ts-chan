@@ -153,6 +153,8 @@ export class Chan<T>
               reject(e);
             }
           };
+          // shouldn't be necessary, unless (for some ungodly reason) some callback within trySend triggered the abort
+          abort.throwIfAborted();
           abort.addEventListener('abort', listener);
         }
         this.#sends.push(callback);
@@ -243,9 +245,11 @@ export class Chan<T>
               reject(e);
             }
           };
+          // shouldn't be necessary, unless (for some ungodly reason) some callback within tryRecv triggered the abort
+          abort.throwIfAborted();
           abort.addEventListener('abort', listener);
         }
-        this.addReceiver(callback);
+        this.#recvs.push(callback);
       });
     } finally {
       if (getYieldGeneration() === yieldGeneration) {

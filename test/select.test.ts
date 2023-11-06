@@ -173,14 +173,12 @@ describe('Select', () => {
           case 1:
             promiseImmediateResolveCount++;
             expect(select.recv(select.cases[result])).toStrictEqual({
-              done: false,
               value: 'immediate',
             });
             break;
           case 2:
             promiseDelayedResolveCount++;
             expect(select.recv(select.cases[result])).toStrictEqual({
-              done: false,
               value: 'delayed',
             });
             break;
@@ -451,7 +449,6 @@ describe('Select', () => {
       const promiseBooleanResult: IteratorResult<true, true | undefined> =
         select.recv(select.cases[2]);
       expect(promiseBooleanResult).toStrictEqual({
-        done: false,
         value: true,
       });
       expect(chanNumber.trySend(1235)).toBe(true);
@@ -609,7 +606,7 @@ describe('Select', () => {
       Awaited<typeof b>,
       Awaited<typeof b> | undefined
     > = select.recv(select.cases[1]);
-    expect(bv).toStrictEqual({done: false, value: 'B'});
+    expect(bv).toStrictEqual({value: 'B'});
 
     resolves['c']('C');
 
@@ -618,7 +615,7 @@ describe('Select', () => {
       Awaited<typeof a>,
       Awaited<typeof a> | undefined
     > = select.recv(select.cases[0]);
-    expect(av).toStrictEqual({done: false, value: 'A'});
+    expect(av).toStrictEqual({value: 'A'});
 
     await expect(select.wait()).resolves.toBe(2);
     // @ts-expect-error -- testing that fails on invalid type
@@ -626,7 +623,7 @@ describe('Select', () => {
       Awaited<typeof a>,
       Awaited<typeof a> | undefined
     > = select.recv(select.cases[2]);
-    expect(cv).toStrictEqual({done: false, value: 'C'});
+    expect(cv).toStrictEqual({value: 'C'});
 
     const sendCaseCh1: SelectCaseSender<'CH1'> = select.cases[3];
     expect(sendCaseCh1).not.toBeUndefined();
@@ -697,7 +694,7 @@ describe('Select', () => {
       Awaited<typeof b>,
       Awaited<typeof b> | undefined
     > = select.recv(select.cases[1]);
-    expect(bv).toStrictEqual({done: false, value: 'B'});
+    expect(bv).toStrictEqual({value: 'B'});
 
     resolves['c']('C');
 
@@ -706,7 +703,7 @@ describe('Select', () => {
       Awaited<typeof a>,
       Awaited<typeof a> | undefined
     > = select.recv(select.cases[0]);
-    expect(av).toStrictEqual({done: false, value: 'A'});
+    expect(av).toStrictEqual({value: 'A'});
 
     await expect(select.wait()).resolves.toBe(2);
     // @ts-expect-error -- testing that fails on invalid type
@@ -714,7 +711,7 @@ describe('Select', () => {
       Awaited<typeof a>,
       Awaited<typeof a> | undefined
     > = select.recv(select.cases[2]);
-    expect(cv).toStrictEqual({done: false, value: 'C'});
+    expect(cv).toStrictEqual({value: 'C'});
 
     const sendCaseCh1: SelectCaseSender<'CH1'> = select.cases[3];
     expect(sendCaseCh1).not.toBeUndefined();
@@ -759,5 +756,149 @@ describe('Select', () => {
     select.cases[0] = recv(new Chan());
     // @ts-expect-error -- testing that fails on operation
     select.cases.length = 5;
+  });
+
+  describe('pending', () => {
+    test('using pending to facilitate cleanup', async () => {
+      const promiseArr = new Array<Promise<number>>();
+      const promiseMap = new Map<
+        Promise<number>,
+        {
+          index: number;
+          resolve: (value: number) => void;
+          reject: (reason: number) => void;
+          // true for resolved false for rejected
+          input?: boolean;
+          // true for resolved false for rejected
+          output?: boolean;
+          // order received from the select (some will be undefined, see below)
+          order?: number;
+        }
+      >();
+      for (let i = 0; i < 15_000; i++) {
+        let resolveV: ((value: number) => void) | undefined;
+        let rejectV: ((reason: number) => void) | undefined;
+        promiseArr.push(
+          new Promise<number>((resolve, reject) => {
+            resolveV = resolve;
+            rejectV = reject;
+          })
+        );
+        if (resolveV === undefined || rejectV === undefined) {
+          throw new Error('unreachable');
+        }
+        promiseMap.set(promiseArr[i], {
+          index: i,
+          resolve: resolveV,
+          reject: rejectV,
+        });
+      }
+
+      const select = Select.promises(promiseArr);
+
+      // simulate promises resolving in random order, in batches of 1-100, each
+      // 0-2ms (rounded), with each promise having a 1/10 chance of rejecting
+      // instead
+      //
+      // additionally, consume until there's 2723 left, which should always be
+      // exact, since it's independent of the promises resolving
+      // then, retrieve those 2723 from the select, verify, then await those
+      // promises, and verify again
+      await Promise.all([
+        (async () => {
+          // use a fair, fisher-yates shuffle, to stage up the resolve order
+          const promises = promiseArr.slice();
+          for (let i = promises.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [promises[i], promises[j]] = [promises[j], promises[i]];
+          }
+          // resolve promises in batches
+          for (let i = 0; i < promises.length; ) {
+            // Determine the size of the current batch (1-100)
+            const batchSize = Math.floor(Math.random() * 100) + 1;
+            const batchPromises: Promise<void>[] = [];
+            for (let j = 0; j < batchSize && i < promises.length; j++, i++) {
+              const promise = promises[i];
+              const promiseInfo = promiseMap.get(promise)!;
+              // Wrap the resolve/reject in a setTimeout to introduce the delay of 0-2ms
+              const delay = Math.round(Math.random() * 2);
+              batchPromises.push(
+                new Promise<void>(resolve => {
+                  setTimeout(() => {
+                    const shouldReject = Math.random() < 0.1; // 1/10 chance of rejecting
+                    if (shouldReject) {
+                      promiseInfo.reject(promiseInfo.index);
+                    } else {
+                      promiseInfo.resolve(promiseInfo.index);
+                    }
+                    promiseInfo.input = !shouldReject;
+                    resolve();
+                  }, delay);
+                })
+              );
+            }
+            // Wait for the entire batch to be processed before moving to the next
+            await Promise.all(batchPromises);
+          }
+        })(),
+        (async () => {
+          // consume until there's 2723 left
+          let remaining = promiseArr.length;
+          for (let order = 0; remaining > 2723; order++) {
+            const i = await select.wait();
+            const promise = promiseArr[i];
+            const promiseInfo = promiseMap.get(promise)!;
+            promiseInfo.order = order;
+            expect(promiseInfo.input).not.toBeUndefined();
+            expect(promiseInfo.output).toBeUndefined();
+            try {
+              const v = select.recv(select.cases[i]);
+              expect(v.done).toBe(undefined);
+              expect(v.value).toBe(i);
+              promiseInfo.output = true;
+            } catch (e) {
+              if (e !== i) {
+                throw e;
+              }
+              promiseInfo.output = false;
+            }
+            expect(promiseInfo.output).toBe(promiseInfo.input);
+            remaining--;
+          }
+
+          const unhandled = select.pending;
+          expect(unhandled.length).toBe(2723);
+          expect(select.length).toBe(2723);
+          for (const v of unhandled) {
+            expect(promiseMap.has(v as any)).toBe(true);
+            expect(promiseMap.get(v as any)!.output).toBeUndefined();
+          }
+        })(),
+      ]);
+
+      const unhandled = select.pending;
+
+      await Promise.all(promiseArr.map(p => p.catch(() => {})));
+
+      expect(unhandled.length).toBe(2723);
+      expect(select.length).toBe(2723);
+      for (const v of unhandled) {
+        expect(promiseMap.has(v as any)).toBe(true);
+        expect(promiseMap.get(v as any)!.output).toBeUndefined();
+        promiseMap.delete(v as any);
+      }
+
+      for (const v of promiseMap.values()) {
+        expect(v.output).not.toBeUndefined();
+      }
+
+      expect(unhandled).toStrictEqual(select.pending);
+    });
+  });
+
+  test('support for value undefined', async () => {
+    const select = new Select([wait(undefined)]);
+    await expect(select.wait()).resolves.toBe(0);
+    expect(select.recv(select.cases[0])).toStrictEqual({value: undefined});
   });
 });

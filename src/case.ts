@@ -49,6 +49,7 @@ export type SelectCaseReceiver<T> = {
 
 /**
  * Promise (or PromiseLike) select case.
+ * See also {@link .wait}.
  */
 export type SelectCasePromise<T> = {
   /**
@@ -126,7 +127,7 @@ export type CaseStateReceiver<T> = CaseStateCommon & {
 
 export type CaseStatePromise<T> = CaseStateCommon & {
   // original PromiseLike value
-  pval?: unknown;
+  pval: PromiseLike<T> | T;
   // original promise/value, wrapped (with catch) to propagate the result
   wait: Promise<void>;
 
@@ -217,7 +218,9 @@ export const send = <T>(
  * WARNING: Cases may only be used in a single select instance, though select
  * instances are intended to be reused, e.g. when implementing control loops.
  */
-export const wait = <T>(value: PromiseLike<T>): SelectCasePromise<Awaited<T>> =>
+export const wait = <T>(
+  value: PromiseLike<T> | T
+): SelectCasePromise<Awaited<T>> =>
   newSelectCase('Promise', {
     // WARNING: any additional logic that assumes value is actually PromiseLike will break where this is used in select.ts
     pval: value,

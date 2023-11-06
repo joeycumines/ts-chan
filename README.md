@@ -32,7 +32,7 @@ however, a real concern for any JavaScript program, that involves communication
 between concurrent operations. Somewhat more insidious than plain call cycles,
 as they are not visible in the call stack, it's important to know that promises
 and async/await operate on the microtask queue, unless they wait on something
-that operates on the macrotask queue (e.g. i.o., timers).
+that operates on the macrotask queue (e.g. IO, timers).
 
 While `queueMicrotask` is not used by this module, MDN's
 [Using microtasks in JavaScript with queueMicrotask()](https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide)
@@ -233,6 +233,8 @@ also supported, though they have no analogue, in Go.
     *   [Parameters](#parameters-13)
     *   [cases](#cases)
         *   [Examples](#examples)
+    *   [length](#length-1)
+    *   [pending](#pending)
     *   [poll](#poll)
     *   [wait](#wait-1)
         *   [Parameters](#parameters-14)
@@ -699,6 +701,7 @@ Type: `"Receiver"`
 ### SelectCasePromise
 
 Promise (or PromiseLike) select case.
+See also [.wait](.wait).
 
 Type: {type: `"Promise"`, selectState: CaseStatePromise\<T>}
 
@@ -751,7 +754,7 @@ instances are intended to be reused, e.g. when implementing control loops.
 
 #### Parameters
 
-*   `value` **PromiseLike\<T>**&#x20;
+*   `value` **(PromiseLike\<T> | T)**&#x20;
 
 Returns **[SelectCasePromise](#selectcasepromise)\<Awaited\<T>>**&#x20;
 
@@ -823,6 +826,26 @@ for (let running = true; running;) {
 ```
 
 Returns **any** T
+
+#### length
+
+Retrieves the number of the cases that are currently pending.
+
+Will return the length of [cases](cases), less the number of *promise*
+cases that have been resolved and received (or ignored).
+
+Type: [number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)
+
+Returns **[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)**&#x20;
+
+#### pending
+
+Returns all the original values of all pending promise cases (cases that
+haven't been consumed or ignored), in case order.
+
+Type: [Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array)\<any>
+
+Returns **[Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array)\<any>**&#x20;
 
 #### poll
 

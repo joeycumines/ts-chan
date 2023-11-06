@@ -164,6 +164,36 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
   }
 
   /**
+   * Retrieves the number of the cases that are currently pending.
+   *
+   * Will return the length of {@link cases}, less the number of _promise_
+   * cases that have been resolved and received (or ignored).
+   */
+  get length(): number {
+    return this.#pending.length;
+  }
+
+  /**
+   * Returns all the original values of all pending promise cases (cases that
+   * haven't been consumed or ignored), in case order.
+   */
+  get pending(): Array<
+    T[number] extends SelectCasePromise<infer U>
+      ? Exclude<SelectCasePromise<U>[typeof selectState]['pval'], undefined>
+      : never
+  > {
+    const pending: any[] = [];
+    // so they're in case order
+    for (const c of this.#cases) {
+      // note: cleared on consume
+      if (c[selectState].wait !== undefined) {
+        pending.push(c[selectState].pval);
+      }
+    }
+    return pending;
+  }
+
+  /**
    * Poll returns the next case that is ready, or undefined if none are
    * ready. It must not be called concurrently with {@link Select.wait} or
    * {@link Select.recv}.
@@ -183,11 +213,7 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
     }
 
     // consume the last poll/wait, if it hasn't been consumed already
-    if (this.#next !== undefined) {
-      this.#cases[this.#next][selectState].ok = undefined;
-      this.#cases[this.#next][selectState].next = undefined;
-      this.#next = undefined;
-    }
+    this.#clearNext();
 
     // note: set to false at the end if no case is ready, or if the case was a promise
     if (this.#reshuffle) {
@@ -304,6 +330,8 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
               'ts-chan: select: next: promise executor not called synchronously'
             );
           }
+          // shouldn't be necessary unless (for some ungodly reason) some callback within poll triggered the abort
+          abort.throwIfAborted();
           abort.addEventListener('abort', abortListener);
         }
 
@@ -408,7 +436,6 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
             // resolved
             result = {
               value: v[selectState].next,
-              done: false,
             };
             break;
           case false:
@@ -419,14 +446,6 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
             };
             break;
         }
-        if (result !== undefined) {
-          // only receives once per promise
-          this.#pending.splice(v[selectState].pidx, 1);
-          for (let i = v[selectState].pidx; i < this.#pending.length; i++) {
-            this.#pending[i].pidx = i;
-          }
-          v[selectState].pidx = undefined;
-        }
       } else {
         throw new Error('ts-chan: select: case not receivable');
       }
@@ -436,10 +455,7 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
       throw new Error('ts-chan: select: case not ready');
     }
 
-    // consuming the value
-    this.#next = undefined;
-    v[selectState].ok = undefined;
-    v[selectState].next = undefined;
+    this.#clearNext();
 
     if (result.err) {
       throw result.value;
@@ -483,6 +499,34 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
   #throwIfInUse() {
     if (this.#waiting) {
       throw new Error('ts-chan: select: cases in use');
+    }
+  }
+
+  #clearNext() {
+    if (this.#next === undefined) {
+      return;
+    }
+    let pidx = this.#cases[this.#next]?.[selectState]?.pidx;
+    if (
+      pidx === undefined ||
+      this.#cases[this.#next][selectState] !== this.#pending[pidx]
+    ) {
+      return;
+    }
+    this.#next = undefined;
+    this.#pending[pidx].ok = undefined;
+    this.#pending[pidx].next = undefined;
+    if (this.#pending[pidx].wait !== undefined) {
+      // only receives once per promise, so we remove from pending + reset case
+      // (not strictly necessary, but nice to clear the reference)
+      this.#pending[pidx].pidx = undefined;
+      this.#pending[pidx].pval = undefined;
+      this.#pending[pidx].wait = undefined;
+      this.#pending[pidx].then = undefined!;
+      this.#pending.splice(pidx, 1);
+      for (; pidx < this.#pending.length; pidx++) {
+        this.#pending[pidx].pidx = pidx;
+      }
     }
   }
 }
@@ -683,7 +727,7 @@ const mapPendingValue = <T extends SelectCase<any>>(v: T, i: number): T => {
         }
       }).then(onfulfilled, onrejected);
     };
-  } else if (v[selectState].pval !== undefined) {
+  } else if ('pval' in v[selectState]) {
     const s = v[selectState];
 
     s.wait = Promise.resolve(s.pval)
