@@ -26,7 +26,7 @@ const args = parseArgs({
   },
 });
 if (!args.values.output || !args.values.listen) {
-  console.error('Usage: node ts-chan.js -l <listen> -o <output>');
+  console.error('Usage: node index.js -l <listen> -o <output> [-c]');
   process.exit(1);
 }
 

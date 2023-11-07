@@ -124,7 +124,7 @@ func BenchmarkServer(b *testing.B) {
 
 	wg.Wait()
 
-	timer := time.NewTimer(5 * time.Second)
+	timer := time.NewTimer(20 * time.Second)
 	defer timer.Stop()
 
 	select {

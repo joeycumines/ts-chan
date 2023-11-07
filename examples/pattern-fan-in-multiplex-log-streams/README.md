@@ -3,6 +3,45 @@
 See [/docs/pattern-fan-in.md](../../docs/pattern-fan-in.md) for more
 information regarding the pattern used by this example.
 
+## What this does
+
+The example implementation, [./index.js](./index.js), implements a TCP server
+that accepts connections, and multiplexes the data from each connection into a
+single log file. The process will exit after all connections have been closed,
+and all data has been written.
+
+## How to run
+
+```
+Usage: node index.js -l <listen> -o <output> [-c]
+```
+
+You will need to `npm install`. The `-c` flag enables the use of `ts-chan`,
+while omitting it uses vanilla JavaScript.
+
+You may test out it manually by running:
+
+```sh
+# shell 1
+npm install
+node index.js -c -l 127.0.0.1:8080 -o /dev/stdout
+
+# shell 2-n
+nc localhost 8080
+```
+
+You may also run the benchmark like:
+
+```sh
+go test -bench=. -benchtime=10s -timeout=10m
+```
+
+You may wish to inspect the output `benchmark-server-*.log` files, to validate
+that all the expected data was written, and just to inspect how it behaved.
+
+To run the benchmark against the baseline, you can edit
+[./benchmark_test.go](./benchmark_test.go), to remove the `-c` flag.
+
 ## Benchmarks
 
 tl;dr the performance is slightly faster than the baseline, if the `addSender`
