@@ -901,4 +901,13 @@ describe('Select', () => {
     await expect(select.wait()).resolves.toBe(0);
     expect(select.recv(select.cases[0])).toStrictEqual({value: undefined});
   });
+
+  test('setUnsafe', () => {
+    const select = new Select([]);
+    expect(select.unsafe).toBe(false);
+    expect(select.setUnsafe(true)).toBe(select);
+    expect(select.unsafe).toBe(true);
+    expect(select.setUnsafe(false)).toBe(select);
+    expect(select.unsafe).toBe(false);
+  });
 });

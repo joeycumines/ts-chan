@@ -30,6 +30,18 @@ import {getYieldGeneration, yieldToMacrotaskQueue} from './yield';
  *   received values. See also {@link cases} and {@link recv}.
  */
 export class Select<T extends readonly SelectCase<any>[] | []> {
+  /**
+   * If set to true, the select will skip the microtask cycle mitigation
+   * mechanism, described by
+   * [The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+   * project README.
+   *
+   * Defaults to false.
+   *
+   * See also {@link .setUnsafe}.
+   */
+  unsafe: boolean;
+
   // Input cases, after converting any non-cases to the promise variant.
   // Returned via the cases property, which is used to provide per-element
   // types.
@@ -61,6 +73,7 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
   #semaphore: SelectSemaphore;
 
   constructor(cases: T) {
+    this.unsafe = false;
     this.#semaphore = {};
     this.#cases = mapPendingValues(
       cases,
@@ -194,6 +207,14 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
   }
 
   /**
+   * Sets the {@link .unsafe} property, and returns this.
+   */
+  setUnsafe(unsafe: boolean): this {
+    this.unsafe = unsafe;
+    return this;
+  }
+
+  /**
    * Poll returns the next case that is ready, or undefined if none are
    * ready. It must not be called concurrently with {@link Select.wait} or
    * {@link Select.recv}.
@@ -288,8 +309,12 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
   async wait(abort?: AbortSignal): Promise<number> {
     abort?.throwIfAborted();
 
-    const yieldGeneration = getYieldGeneration();
-    const yieldPromise = yieldToMacrotaskQueue();
+    let yieldGeneration: number | undefined;
+    let yieldPromise: Promise<number> | undefined;
+    if (!this.unsafe) {
+      yieldGeneration = getYieldGeneration();
+      yieldPromise = yieldToMacrotaskQueue();
+    }
     try {
       // need to call poll first - avoid accidentally buffering receives
       // (also consumes any this.#next value)
@@ -382,7 +407,10 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
         this.#waiting = false;
       }
     } finally {
-      if (getYieldGeneration() === yieldGeneration) {
+      if (
+        yieldGeneration !== undefined &&
+        getYieldGeneration() === yieldGeneration
+      ) {
         await yieldPromise;
       }
     }

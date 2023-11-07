@@ -167,31 +167,34 @@ also supported, though they have no analogue, in Go.
 
 *   [Chan](#chan)
     *   [Parameters](#parameters)
+    *   [unsafe](#unsafe)
     *   [capacity](#capacity)
     *   [length](#length)
     *   [concurrency](#concurrency)
-    *   [trySend](#trysend)
+    *   [setUnsafe](#setunsafe)
         *   [Parameters](#parameters-1)
-    *   [send](#send)
+    *   [trySend](#trysend)
         *   [Parameters](#parameters-2)
+    *   [send](#send)
+        *   [Parameters](#parameters-3)
     *   [tryRecv](#tryrecv)
     *   [recv](#recv)
-        *   [Parameters](#parameters-3)
+        *   [Parameters](#parameters-4)
     *   [close](#close)
 *   [ChanIterator](#chaniterator)
-    *   [Parameters](#parameters-4)
+    *   [Parameters](#parameters-5)
     *   [iterator](#iterator)
     *   [next](#next)
     *   [return](#return)
     *   [throw](#throw)
-        *   [Parameters](#parameters-5)
+        *   [Parameters](#parameters-6)
 *   [ChanAsyncIterator](#chanasynciterator)
-    *   [Parameters](#parameters-6)
+    *   [Parameters](#parameters-7)
     *   [asyncIterator](#asynciterator)
     *   [next](#next-1)
     *   [return](#return-1)
     *   [throw](#throw-1)
-        *   [Parameters](#parameters-7)
+        *   [Parameters](#parameters-8)
 *   [Receiver](#receiver)
     *   [Properties](#properties)
     *   [addReceiver](#addreceiver)
@@ -210,9 +213,9 @@ also supported, though they have no analogue, in Go.
     *   [Properties](#properties-3)
 *   [getSender](#getsender)
 *   [SendOnClosedChannelError](#sendonclosedchannelerror)
-    *   [Parameters](#parameters-8)
-*   [CloseOfClosedChannelError](#closeofclosedchannelerror)
     *   [Parameters](#parameters-9)
+*   [CloseOfClosedChannelError](#closeofclosedchannelerror)
+    *   [Parameters](#parameters-10)
 *   [SelectCase](#selectcase)
 *   [SelectCaseSender](#selectcasesender)
     *   [Properties](#properties-4)
@@ -224,28 +227,31 @@ also supported, though they have no analogue, in Go.
     *   [Properties](#properties-6)
     *   [type](#type-2)
 *   [recv](#recv-1)
-    *   [Parameters](#parameters-10)
-*   [send](#send-1)
     *   [Parameters](#parameters-11)
-*   [wait](#wait)
+*   [send](#send-1)
     *   [Parameters](#parameters-12)
-*   [Select](#select)
+*   [wait](#wait)
     *   [Parameters](#parameters-13)
+*   [Select](#select)
+    *   [Parameters](#parameters-14)
+    *   [unsafe](#unsafe-1)
     *   [cases](#cases)
         *   [Examples](#examples)
     *   [length](#length-1)
     *   [pending](#pending)
+    *   [setUnsafe](#setunsafe-1)
+        *   [Parameters](#parameters-15)
     *   [poll](#poll)
     *   [wait](#wait-1)
-        *   [Parameters](#parameters-14)
-    *   [recv](#recv-2)
-        *   [Parameters](#parameters-15)
-    *   [promises](#promises)
         *   [Parameters](#parameters-16)
+    *   [recv](#recv-2)
+        *   [Parameters](#parameters-17)
+    *   [promises](#promises)
+        *   [Parameters](#parameters-18)
 *   [SelectFactory](#selectfactory)
     *   [clear](#clear)
     *   [with](#with)
-        *   [Parameters](#parameters-17)
+        *   [Parameters](#parameters-19)
 *   [getYieldGeneration](#getyieldgeneration)
 *   [yieldToMacrotaskQueue](#yieldtomacrotaskqueue)
 
@@ -265,6 +271,19 @@ In addition to various utility methods, it implements:
 
 *   `capacity`   (optional, default `0`)
 *   `newDefaultValue` **function (): T?**&#x20;
+
+#### unsafe
+
+If set to true, the channel will skip the microtask cycle mitigation
+mechanism, described by
+[The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+project README.
+
+Defaults to false.
+
+See also [.setUnsafe](.setUnsafe).
+
+Type: [boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean)
 
 #### capacity
 
@@ -291,6 +310,16 @@ receivers.
 Type: [number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)
 
 Returns **[number](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Number)**&#x20;
+
+#### setUnsafe
+
+Sets the [.unsafe](.unsafe) property, and returns this.
+
+##### Parameters
+
+*   `unsafe` **[boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean)**&#x20;
+
+Returns **this**&#x20;
 
 #### trySend
 
@@ -775,6 +804,19 @@ cases.
     must be initialized using [.send](.send), [.recv](.recv), unless they are
     to be treated as a promise.
 
+#### unsafe
+
+If set to true, the select will skip the microtask cycle mitigation
+mechanism, described by
+[The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+project README.
+
+Defaults to false.
+
+See also [.setUnsafe](.setUnsafe).
+
+Type: [boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean)
+
 #### cases
 
 Retrieves the cases associated with this select instance.
@@ -846,6 +888,16 @@ haven't been consumed or ignored), in case order.
 Type: [Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array)\<any>
 
 Returns **[Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array)\<any>**&#x20;
+
+#### setUnsafe
+
+Sets the [.unsafe](.unsafe) property, and returns this.
+
+##### Parameters
+
+*   `unsafe` **[boolean](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean)**&#x20;
+
+Returns **this**&#x20;
 
 #### poll
 

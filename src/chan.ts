@@ -33,6 +33,18 @@ export class Chan<T>
     Iterable<T>,
     AsyncIterable<T>
 {
+  /**
+   * If set to true, the channel will skip the microtask cycle mitigation
+   * mechanism, described by
+   * [The microtask queue: a footgun](#the-microtask-queue-a-footgun), in the
+   * project README.
+   *
+   * Defaults to false.
+   *
+   * See also {@link .setUnsafe}.
+   */
+  unsafe: boolean;
+
   #buffer: CircularBuffer<T> | undefined;
   #newDefaultValue: (() => T) | undefined;
   #open: boolean;
@@ -40,6 +52,7 @@ export class Chan<T>
   #recvs: ReceiverCallback<T>[];
 
   constructor(capacity = 0, newDefaultValue?: () => T) {
+    this.unsafe = false;
     this.#buffer = capacity === 0 ? undefined : new CircularBuffer(capacity);
     this.#newDefaultValue = newDefaultValue;
     this.#open = true;
@@ -85,6 +98,14 @@ export class Chan<T>
   }
 
   /**
+   * Sets the {@link .unsafe} property, and returns this.
+   */
+  setUnsafe(unsafe: boolean): this {
+    this.unsafe = unsafe;
+    return this;
+  }
+
+  /**
    * Performs a synchronous send operation on the channel, returning true if
    * it succeeds, or false if there are no waiting receivers, and the channel
    * is full.
@@ -115,8 +136,12 @@ export class Chan<T>
   async send(value: T, abort?: AbortSignal): Promise<void> {
     abort?.throwIfAborted();
 
-    const yieldGeneration = getYieldGeneration();
-    const yieldPromise = yieldToMacrotaskQueue();
+    let yieldGeneration: number | undefined;
+    let yieldPromise: Promise<number> | undefined;
+    if (!this.unsafe) {
+      yieldGeneration = getYieldGeneration();
+      yieldPromise = yieldToMacrotaskQueue();
+    }
     try {
       if (this.trySend(value)) {
         return;
@@ -160,7 +185,10 @@ export class Chan<T>
         this.#sends.push(callback);
       });
     } finally {
-      if (getYieldGeneration() === yieldGeneration) {
+      if (
+        yieldGeneration !== undefined &&
+        getYieldGeneration() === yieldGeneration
+      ) {
         await yieldPromise;
       }
     }
@@ -199,8 +227,12 @@ export class Chan<T>
   async recv(abort?: AbortSignal): Promise<IteratorResult<T, T | undefined>> {
     abort?.throwIfAborted();
 
-    const yieldGeneration = getYieldGeneration();
-    const yieldPromise = yieldToMacrotaskQueue();
+    let yieldGeneration: number | undefined;
+    let yieldPromise: Promise<number> | undefined;
+    if (!this.unsafe) {
+      yieldGeneration = getYieldGeneration();
+      yieldPromise = yieldToMacrotaskQueue();
+    }
     try {
       {
         const result = this.tryRecv();
@@ -252,7 +284,10 @@ export class Chan<T>
         this.#recvs.push(callback);
       });
     } finally {
-      if (getYieldGeneration() === yieldGeneration) {
+      if (
+        yieldGeneration !== undefined &&
+        getYieldGeneration() === yieldGeneration
+      ) {
         await yieldPromise;
       }
     }

@@ -7,6 +7,7 @@ import {
   type SenderCallback,
   SendOnClosedChannelError,
 } from '../src/protocol';
+import {Select} from '../src';
 
 describe('Chan', () => {
   describe('constructor', () => {
@@ -677,6 +678,15 @@ describe('Chan', () => {
         ],
       ]);
     });
+  });
+
+  test('setUnsafe', () => {
+    const chan = new Chan();
+    expect(chan.unsafe).toBe(false);
+    expect(chan.setUnsafe(true)).toBe(chan);
+    expect(chan.unsafe).toBe(true);
+    expect(chan.setUnsafe(false)).toBe(chan);
+    expect(chan.unsafe).toBe(false);
   });
 });
 
