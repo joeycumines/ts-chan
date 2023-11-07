@@ -82,7 +82,8 @@
       "/.github",
       "/build/test",
       "/examples",
-      "/.prettierignore"
+      "/.prettierignore",
+      "/docs"
     ]
   }
 }

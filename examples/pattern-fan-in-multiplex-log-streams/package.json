@@ -1,0 +1,7 @@
+{
+  "name": "pattern-fan-in-multiplex-log-streams",
+  "private": true,
+  "dependencies": {
+    "ts-chan": "latest"
+  }
+}

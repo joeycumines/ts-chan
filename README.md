@@ -18,6 +18,23 @@ I'll be iterating on this for a few weeks, in my spare time, with the goal of
 a production-ready module, which can be used any JS environment, including
 browsers.
 
+## Why ts-chan?
+
+There are many applications for concurrent programming, and (IMO) it's
+something that anyone writing software should have a basic understanding of.
+Concurrency is rarely trivial, it's often difficult to get right. By providing
+a simple API that mitigates common pitfalls, `ts-chan` aims to make concurrent
+programming more accessible to JavaScript developers.
+
+Patterns are a broad topic, but I intend to document several, with a
+side-by-side comparison to vanilla JS.
+Additionally, you'll find that many of Go's concurrency patterns apply
+directly, excepting (for example) those that leverage multiple CPUs.
+
+See also:
+
+1.  [/docs/pattern-fan-in.md](./docs/pattern-fan-in.md)
+
 ## Usage
 
 ### Installation

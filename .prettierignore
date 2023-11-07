@@ -2,3 +2,4 @@
 /coverage
 /examples/simple-http-benchmark/deno-server-baseline
 /examples/simple-http-benchmark/deno-server-ping-pong
+/docs

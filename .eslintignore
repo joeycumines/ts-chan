@@ -3,3 +3,5 @@
 /examples/simple-http-benchmark/deno-server-baseline
 /examples/simple-http-benchmark/deno-server-ping-pong
 /examples/concurrent-prime-sieve
+/docs
+/examples/pattern-fan-in-multiplex-log-streams
