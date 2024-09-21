@@ -12,7 +12,7 @@ const reqCh = new Chan();
 const resCh = new Chan();
 
 void (async () => {
-  // eslint-disable-next-line no-unused-vars,node/no-unsupported-features/es-syntax
+  // eslint-disable-next-line n/no-unsupported-features/es-syntax,no-unused-vars
   for await (const req of reqCh) {
     await resCh.send(buffer);
   }

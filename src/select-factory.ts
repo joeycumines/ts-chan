@@ -83,10 +83,10 @@ export class SelectFactory {
       readonly [K in keyof T]: T[K] extends SelectFactoryCaseSender<infer U>
         ? SelectCaseSender<U>
         : T[K] extends SelectFactoryCaseReceiver<infer U>
-        ? SelectCaseReceiver<U>
-        : T[K] extends SelectFactoryCase<infer U>
-        ? SelectCase<U>
-        : never;
+          ? SelectCaseReceiver<U>
+          : T[K] extends SelectFactoryCase<infer U>
+            ? SelectCase<U>
+            : never;
     } & {
       readonly length: T['length'];
     }
@@ -104,9 +104,7 @@ export class SelectFactory {
 
     if (this.#select.cases.length !== cases.length) {
       throw new Error(
-        `ts-chan: select-factory: invalid number of cases: expected ${
-          this.#select.cases.length
-        } got ${cases.length}`
+        `ts-chan: select-factory: invalid number of cases: expected ${this.#select.cases.length} got ${cases.length}`
       );
     }
 

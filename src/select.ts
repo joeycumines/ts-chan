@@ -107,14 +107,14 @@ export class Select<T extends readonly SelectCase<any>[] | []> {
       readonly [K in keyof T]: T[K] extends SelectCaseSender<infer U>
         ? SelectCaseSender<U>
         : T[K] extends SelectCaseReceiver<infer U>
-        ? SelectCaseReceiver<U>
-        : T[K] extends SelectCasePromise<infer U>
-        ? SelectCasePromise<U>
-        : T[K] extends SelectCase<infer U>
-        ? SelectCase<U>
-        : T[K] extends PromiseLike<infer U>
-        ? SelectCasePromise<Awaited<U>>
-        : never;
+          ? SelectCaseReceiver<U>
+          : T[K] extends SelectCasePromise<infer U>
+            ? SelectCasePromise<U>
+            : T[K] extends SelectCase<infer U>
+              ? SelectCase<U>
+              : T[K] extends PromiseLike<infer U>
+                ? SelectCasePromise<Awaited<U>>
+                : never;
     } & {
       readonly length: T['length'];
     }
